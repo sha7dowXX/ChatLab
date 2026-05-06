@@ -1,0 +1,653 @@
+# Instincts generated from https://github.com/sha7dowXX/ChatLab
+# Generated: 2026-05-06T15:57:45.766Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: ChatLab-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, fix, release, chore, docs
+
+## Evidence
+
+- 100 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: 搜索工具自动携带上下文消息, fix: 补全工具调用显示名称的 i18n 翻译
+
+---
+id: ChatLab-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Commit Length
+
+## Action
+
+Keep commit messages concise (~24 characters)
+
+## Evidence
+
+- Average commit message length: 24 chars
+- Based on 100 commits
+
+---
+id: ChatLab-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: ChatLab-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: ChatLab-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: ChatLab-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: assets, components, composables, config, i18n
+
+---
+id: ChatLab-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: ChatLab-workflow-feature-development
+trigger: "when implementing a new feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Feature Development
+
+## Action
+
+Follow the feature-development workflow:
+1. Add feature implementation
+2. Add tests for feature
+3. Update documentation
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~18x per month
+- Files: electron/main/ai/tools/definitions/*, electron/main/ai/tools/*, electron/main/worker/*
+
+---
+id: ChatLab-workflow-add-or-update-i18n-entries
+trigger: "when doing add or update i18n entries"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Add Or Update I18n Entries
+
+## Action
+
+Follow the add-or-update-i18n-entries workflow:
+1. Edit or add keys in multiple locale JSON files under src/i18n/locales/ (e.g., en-US, zh-CN, ja-JP, zh-TW).
+2. Update or create relevant UI components or pages to use the new/updated i18n keys.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~8x per month
+- Files: src/i18n/locales/*/*.json, src/pages/**/*.vue, src/components/**/*.vue
+
+---
+id: ChatLab-workflow-release-version-bump-and-changelog
+trigger: "when doing release version bump and changelog"
+confidence: 0.7
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Release Version Bump And Changelog
+
+## Action
+
+Follow the release-version-bump-and-changelog workflow:
+1. Update package.json with the new version.
+2. Update changelog files for each language (docs/changelogs_*.json).
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~4x per month
+- Files: package.json, docs/changelogs_*.json
+
+---
+id: ChatLab-workflow-add-or-update-docs-multilingual
+trigger: "when doing add or update docs multilingual"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Add Or Update Docs Multilingual
+
+## Action
+
+Follow the add-or-update-docs-multilingual workflow:
+1. Edit or add markdown files in docs/cn/, docs/en/, docs/tw/, etc.
+2. Optionally update or add GitHub Actions workflow for docs sync/build.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: docs/cn/**/*.md, docs/en/**/*.md, docs/tw/**/*.md
+
+---
+id: ChatLab-workflow-feature-development-across-backend-and-frontend
+trigger: "when doing feature development across backend and frontend"
+confidence: 0.8
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Feature Development Across Backend And Frontend
+
+## Action
+
+Follow the feature-development-across-backend-and-frontend workflow:
+1. Update or add files in electron/main/ (backend logic, IPC, parsers, etc).
+2. Update or add files in electron/preload/ (preload APIs, type definitions).
+3. Update or add Vue components in src/components/ or src/pages/.
+4. Update or add store modules in src/stores/.
+5. Update i18n files if new UI text is introduced.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~6x per month
+- Files: electron/main/**/*.ts, electron/preload/**/*.ts, src/components/**/*.vue
+
+---
+id: ChatLab-workflow-parser-format-support-or-improvement
+trigger: "when doing parser format support or improvement"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Parser Format Support Or Improvement
+
+## Action
+
+Follow the parser-format-support-or-improvement workflow:
+1. Edit or add files under electron/main/parser/formats/ for the specific format.
+2. Update or add related files in electron/main/parser/ and types.
+3. Optionally update preload APIs or UI to reflect new parsing capabilities.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: electron/main/parser/formats/*.ts, electron/main/parser/*.ts
+
+---
+id: ChatLab-workflow-ci-cd-workflow-update
+trigger: "when doing ci cd workflow update"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/sha7dowXX/ChatLab
+---
+
+# ChatLab Workflow Ci Cd Workflow Update
+
+## Action
+
+Follow the ci-cd-workflow-update workflow:
+1. Edit .github/workflows/*.yml files.
+2. Update package.json or lock files if dependencies or build steps change.
+3. Optionally update electron-builder.yml or related config files.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: .github/workflows/*.yml, package.json, pnpm-lock.yaml
+
+---
+id: chatlab-instinct-file-naming-camelcase
+trigger: "When creating a new file in the codebase"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct File Naming Camelcase
+
+## Action
+
+Name the file using camelCase (e.g., myComponent.ts)
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.files
+- Observed in src/components, src/composables
+
+---
+id: chatlab-instinct-function-naming-camelcase
+trigger: "When defining a new function"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Function Naming Camelcase
+
+## Action
+
+Name the function using camelCase (e.g., fetchData)
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.functions
+- Consistent in TypeScript files
+
+---
+id: chatlab-instinct-class-naming-pascalcase
+trigger: "When defining a new class"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Class Naming Pascalcase
+
+## Action
+
+Name the class using PascalCase (e.g., ChatParser)
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.classes
+- Seen in electron/main/parser/*.ts
+
+---
+id: chatlab-instinct-constant-naming-screaming-snake-case
+trigger: "When defining a constant value"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Constant Naming Screaming Snake Case
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE (e.g., DEFAULT_TIMEOUT)
+
+## Evidence
+
+- Pattern in codeStyle.namingConventions.constants
+
+---
+id: chatlab-instinct-import-relative
+trigger: "When importing modules within the project"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Import Relative
+
+## Action
+
+Use relative import paths (e.g., import x from '../utils')
+
+## Evidence
+
+- Pattern in codeStyle.importStyle
+- Seen in src/components/*.ts
+
+---
+id: chatlab-instinct-export-named
+trigger: "When exporting functions, classes, or variables"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Export Named
+
+## Action
+
+Use named exports (e.g., export function foo {})
+
+## Evidence
+
+- Pattern in codeStyle.exportStyle
+- Seen in src/utils/*.ts
+
+---
+id: chatlab-instinct-try-catch-error-handling
+trigger: "When handling errors in TypeScript code"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Try Catch Error Handling
+
+## Action
+
+Use try-catch blocks for error handling
+
+## Evidence
+
+- Pattern in errorHandling.style
+- Seen in electron/main/worker/*.ts
+
+---
+id: chatlab-instinct-test-location-separate
+trigger: "When adding new tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Test Location Separate
+
+## Action
+
+Place test files in separate directories from source files
+
+## Evidence
+
+- Pattern in architecture.folderStructure.testLocation
+- Seen in **/*.test.*
+
+---
+id: chatlab-instinct-test-feature-after-implementation
+trigger: "When implementing a new feature"
+confidence: 0.85
+domain: testing
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Test Feature After Implementation
+
+## Action
+
+Add corresponding test files after feature implementation
+
+## Evidence
+
+- Seen in workflow.feature-development.commitSequence
+- Example: Add feature implementation → Add tests for feature
+
+---
+id: chatlab-instinct-git-commit-conventional
+trigger: "When making a git commit"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Git Commit Conventional
+
+## Action
+
+Format the commit message using Conventional Commits (e.g., feat: description, fix: description)
+
+## Evidence
+
+- Pattern in commits.type
+- Examples: 'feat: 搜索工具自动携带上下文消息', 'fix: 补全工具调用显示名称的 i18n 翻译'
+
+---
+id: chatlab-instinct-git-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Git Commit Length
+
+## Action
+
+Keep the commit message concise, around 24 characters on average
+
+## Evidence
+
+- Pattern in commits.averageLength
+- Examples: 'docs: update', 'chore: 支持Linux打包'
+
+---
+id: chatlab-instinct-workflow-add-or-update-i18n-entries
+trigger: "When adding a new feature, UI component, or updating displayed text in multiple languages"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Workflow Add Or Update I18n Entries
+
+## Action
+
+Edit or add keys in src/i18n/locales/*/*.json and update relevant Vue components/pages to use them
+
+## Evidence
+
+- Workflow: add-or-update-i18n-entries
+- Files: src/i18n/locales/*/*.json, src/components/**/*.vue
+
+---
+id: chatlab-instinct-workflow-release-version-bump-and-changelog
+trigger: "When preparing for a new release version"
+confidence: 0.98
+domain: workflow
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Workflow Release Version Bump And Changelog
+
+## Action
+
+Update package.json with the new version and update docs/changelogs_*.json for each language
+
+## Evidence
+
+- Workflow: release-version-bump-and-changelog
+- Files: package.json, docs/changelogs_*.json
+
+---
+id: chatlab-instinct-workflow-add-or-update-docs-multilingual
+trigger: "When documentation needs to be added or updated for new features or improvements"
+confidence: 0.92
+domain: workflow
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Workflow Add Or Update Docs Multilingual
+
+## Action
+
+Edit or add markdown files in docs/cn/, docs/en/, docs/tw/, and optionally update .github/workflows/sync-docs.yml
+
+## Evidence
+
+- Workflow: add-or-update-docs-multilingual
+- Files: docs/cn/**/*.md, docs/en/**/*.md, .github/workflows/sync-docs.yml
+
+---
+id: chatlab-instinct-workflow-feature-development-across-backend-and-frontend
+trigger: "When adding a new feature or refactoring a major capability that spans backend logic and frontend UI"
+confidence: 0.93
+domain: workflow
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Workflow Feature Development Across Backend And Frontend
+
+## Action
+
+Update/add files in electron/main/, electron/preload/, src/components/, src/pages/, src/stores/, and update i18n files if new UI text is introduced
+
+## Evidence
+
+- Workflow: feature-development-across-backend-and-frontend
+- Files: electron/main/**/*.ts, src/components/**/*.vue, src/i18n/locales/*/*.json
+
+---
+id: chatlab-instinct-workflow-parser-format-support-or-improvement
+trigger: "When adding support for a new chat log format or improving parsing for an existing format"
+confidence: 0.88
+domain: workflow
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Workflow Parser Format Support Or Improvement
+
+## Action
+
+Edit/add files under electron/main/parser/formats/ and electron/main/parser/, optionally update preload APIs or UI
+
+## Evidence
+
+- Workflow: parser-format-support-or-improvement
+- Files: electron/main/parser/formats/*.ts, electron/main/parser/*.ts
+
+---
+id: chatlab-instinct-workflow-ci-cd-workflow-update
+trigger: "When changing Node version, build tools, or automating new steps in the release process"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: sha7dowXX/ChatLab
+---
+
+# Chatlab Instinct Workflow Ci Cd Workflow Update
+
+## Action
+
+Edit .github/workflows/*.yml, update package.json or lock files, and optionally update electron-builder.yml
+
+## Evidence
+
+- Workflow: ci-cd-workflow-update
+- Files: .github/workflows/*.yml, package.json, electron-builder.yml
+
