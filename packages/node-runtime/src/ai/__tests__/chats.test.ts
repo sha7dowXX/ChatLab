@@ -1,0 +1,914 @@
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import Database from 'better-sqlite3'
+import { AIChatManager } from '../chats'
+import type { AIEntityRef } from '../chats'
+import type { ChartPayload } from '@openchatlab/core'
+
+const sqliteNativeBinding = process.env.CHATLAB_TEST_SQLITE_NATIVE_BINDING
+
+function createTempDir(): string {
+  return mkdtempSync(join(tmpdir(), 'chatlab-ai-conv-'))
+}
+
+function createTestDatabase(filename: string): Database.Database {
+  return sqliteNativeBinding ? new Database(filename, { nativeBinding: sqliteNativeBinding }) : new Database(filename)
+}
+
+function createManager(dir: string): AIChatManager {
+  return sqliteNativeBinding ? new AIChatManager(dir, { nativeBinding: sqliteNativeBinding }) : new AIChatManager(dir)
+}
+
+function cleanup(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
+  } catch {
+    // Windows can hold SQLite WAL handles briefly after close; temp cleanup is best-effort.
+  }
+}
+
+describe('AIChatManager legacy migration', () => {
+  it('creates ai_chat schema for fresh databases', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('session-1', 'Fresh', 'general_cn')
+      manager.addMessage(conv.id, 'user', 'hello')
+      manager.close()
+
+      const db = createTestDatabase(join(dir, 'conversations.db'))
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as Array<{
+        name: string
+      }>
+      const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type='index' ORDER BY name").all() as Array<{
+        name: string
+      }>
+      const messageColumns = db.pragma('table_info(ai_message)') as Array<{ name: string }>
+
+      assert.ok(tables.some((table) => table.name === 'ai_chat'))
+      assert.ok(tables.some((table) => table.name === 'ai_message'))
+      assert.ok(indexes.some((index) => index.name === 'idx_ai_chat_session'))
+      assert.ok(indexes.some((index) => index.name === 'idx_ai_message_ai_chat'))
+      assert.ok(messageColumns.some((column) => column.name === 'ai_chat_id'))
+      assert.equal(
+        (db.prepare('SELECT session_id as sessionId FROM ai_chat WHERE id = ?').get(conv.id) as { sessionId: string })
+          .sessionId,
+        'session-1'
+      )
+      db.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('migrates legacy ai_conversation rows into ai_chat', () => {
+    const dir = createTempDir()
+    try {
+      const db = createTestDatabase(join(dir, 'conversations.db'))
+      db.exec(`
+        CREATE TABLE ai_conversation (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          title TEXT,
+          assistant_id TEXT DEFAULT 'general_cn',
+          active_message_id TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE ai_message (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          data_keywords TEXT,
+          data_message_count INTEGER,
+          content_blocks TEXT,
+          token_usage TEXT,
+          debug_context TEXT,
+          parent_id TEXT,
+          sibling_group_id TEXT,
+          branch_index INTEGER DEFAULT 0
+        );
+        CREATE INDEX idx_ai_conversation_session ON ai_conversation(session_id);
+        CREATE INDEX idx_ai_message_conversation ON ai_message(conversation_id);
+      `)
+      db.prepare('INSERT INTO ai_conversation VALUES (?, ?, ?, ?, NULL, ?, ?)').run(
+        'conv-migrate',
+        'session-1',
+        'Legacy AI Chat',
+        'general_cn',
+        1,
+        3
+      )
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)').run(
+        'lm1',
+        'conv-migrate',
+        'user',
+        'first',
+        1
+      )
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)').run(
+        'lm2',
+        'conv-migrate',
+        'assistant',
+        'second',
+        2
+      )
+      db.close()
+
+      const manager = createManager(dir)
+      const messages = manager.getMessages('conv-migrate')
+      assert.deepEqual(
+        messages.map((message) => message.content),
+        ['first', 'second']
+      )
+      manager.close()
+
+      const migrated = createTestDatabase(join(dir, 'conversations.db'))
+      const tables = migrated
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        .all() as Array<{ name: string }>
+      const messageColumns = migrated.pragma('table_info(ai_message)') as Array<{ name: string }>
+      const chat = migrated.prepare('SELECT id, session_id as sessionId, title FROM ai_chat').get() as {
+        id: string
+        sessionId: string
+        title: string
+      }
+      const messageRows = migrated
+        .prepare('SELECT id, ai_chat_id as aiChatId, content FROM ai_message ORDER BY timestamp ASC')
+        .all() as Array<{ id: string; aiChatId: string; content: string }>
+
+      assert.ok(tables.some((table) => table.name === 'ai_chat'))
+      assert.ok(!tables.some((table) => table.name === 'ai_conversation'))
+      assert.ok(messageColumns.some((column) => column.name === 'ai_chat_id'))
+      assert.ok(!messageColumns.some((column) => column.name === 'conversation_id'))
+      assert.deepEqual(chat, { id: 'conv-migrate', sessionId: 'session-1', title: 'Legacy AI Chat' })
+      assert.deepEqual(
+        messageRows.map((row) => ({ aiChatId: row.aiChatId, content: row.content })),
+        [
+          { aiChatId: 'conv-migrate', content: 'first' },
+          { aiChatId: 'conv-migrate', content: 'second' },
+        ]
+      )
+      migrated.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('migrates legacy flat messages into an active path', () => {
+    const dir = createTempDir()
+    try {
+      const db = createTestDatabase(join(dir, 'conversations.db'))
+      db.exec(`
+        CREATE TABLE ai_conversation (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          title TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE ai_message (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          data_keywords TEXT,
+          data_message_count INTEGER,
+          content_blocks TEXT
+        );
+      `)
+      db.prepare('INSERT INTO ai_conversation VALUES (?, ?, ?, ?, ?)').run('conv-1', 'session-1', 'Legacy', 1, 4)
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL)').run(
+        'm1',
+        'conv-1',
+        'user',
+        'one',
+        1
+      )
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL)').run(
+        'm2',
+        'conv-1',
+        'assistant',
+        'two',
+        2
+      )
+      db.close()
+
+      const manager = createManager(dir)
+      const messages = manager.getMessages('conv-1')
+      assert.deepEqual(
+        messages.map((message) => message.content),
+        ['one', 'two']
+      )
+      assert.equal(messages[0]?.parentId, null)
+      assert.equal(messages[1]?.parentId, 'm1')
+      assert.equal(manager.getAIChat('conv-1')?.activeMessageId, 'm2')
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('repairs partially migrated legacy rows that already have tree columns', () => {
+    const dir = createTempDir()
+    try {
+      const db = createTestDatabase(join(dir, 'conversations.db'))
+      db.exec(`
+        CREATE TABLE ai_conversation (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          title TEXT,
+          assistant_id TEXT DEFAULT 'general_cn',
+          active_message_id TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE ai_message (
+          id TEXT PRIMARY KEY,
+          conversation_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          data_keywords TEXT,
+          data_message_count INTEGER,
+          content_blocks TEXT,
+          token_usage TEXT,
+          debug_context TEXT,
+          parent_id TEXT,
+          sibling_group_id TEXT,
+          branch_index INTEGER DEFAULT 0
+        );
+      `)
+      db.prepare('INSERT INTO ai_conversation VALUES (?, ?, ?, ?, NULL, ?, ?)').run(
+        'conv-partial',
+        'session-1',
+        'Partial',
+        'general_cn',
+        1,
+        3
+      )
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)').run(
+        'pm1',
+        'conv-partial',
+        'user',
+        'first',
+        1
+      )
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL)').run(
+        'pm2',
+        'conv-partial',
+        'assistant',
+        'second',
+        2
+      )
+      db.close()
+
+      const manager = createManager(dir)
+      const messages = manager.getMessages('conv-partial')
+      assert.deepEqual(
+        messages.map((message) => message.content),
+        ['first', 'second']
+      )
+      assert.equal(messages[0]?.parentId, null)
+      assert.equal(messages[1]?.parentId, 'pm1')
+      assert.equal(manager.getAIChat('conv-partial')?.activeMessageId, 'pm2')
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('adds global chat and entity reference columns to the previously released schema', () => {
+    const dir = createTempDir()
+    try {
+      const db = createTestDatabase(join(dir, 'conversations.db'))
+      db.exec(`
+        CREATE TABLE ai_chat (
+          id TEXT PRIMARY KEY,
+          session_id TEXT NOT NULL,
+          title TEXT,
+          assistant_id TEXT DEFAULT 'general_cn',
+          active_message_id TEXT,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        CREATE TABLE ai_message (
+          id TEXT PRIMARY KEY,
+          ai_chat_id TEXT NOT NULL,
+          role TEXT NOT NULL,
+          content TEXT NOT NULL,
+          timestamp INTEGER NOT NULL,
+          data_keywords TEXT,
+          data_message_count INTEGER,
+          content_blocks TEXT,
+          parent_id TEXT,
+          sibling_group_id TEXT,
+          branch_index INTEGER DEFAULT 0,
+          debug_context TEXT,
+          token_usage TEXT
+        );
+      `)
+      db.prepare('INSERT INTO ai_chat VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+        'existing-chat',
+        'session-existing',
+        'Existing',
+        'general_cn',
+        'existing-message',
+        1,
+        1
+      )
+      db.prepare('INSERT INTO ai_message VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL, NULL, ?, 0, NULL, NULL)').run(
+        'existing-message',
+        'existing-chat',
+        'user',
+        'hello',
+        1,
+        'existing-message'
+      )
+      db.close()
+
+      const manager = createManager(dir)
+      assert.equal(manager.getAIChats('session-existing')[0]?.kind, 'session')
+      assert.equal(manager.getMessages('existing-chat')[0]?.entityRefs, undefined)
+      manager.close()
+
+      const migrated = createTestDatabase(join(dir, 'conversations.db'))
+      const chatColumns = migrated.pragma('table_info(ai_chat)') as Array<{ name: string }>
+      const messageColumns = migrated.pragma('table_info(ai_message)') as Array<{ name: string }>
+      assert.ok(chatColumns.some((column) => column.name === 'kind'))
+      assert.ok(messageColumns.some((column) => column.name === 'entity_refs'))
+      migrated.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})
+
+describe('AIChatManager global chats and entity references', () => {
+  const entityRefs: AIEntityRef[] = [
+    { type: 'contact', contactKey: 'qq:10001', displayName: 'Alice' },
+    { type: 'session', sessionId: 'group-1', displayName: 'Project Group', sessionType: 'group' },
+  ]
+
+  it('keeps global chats out of session lists and counts', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const sessionChat = manager.createAIChat('session-1', 'Session', 'general_cn')
+      const globalChat = manager.createGlobalAIChat('Global', 'general_cn')
+
+      assert.equal(sessionChat.kind, 'session')
+      assert.equal(globalChat.kind, 'global')
+      assert.equal(globalChat.sessionId, '')
+      assert.deepEqual(
+        manager.getAIChats('session-1').map((chat) => chat.id),
+        [sessionChat.id]
+      )
+      assert.deepEqual(
+        manager.getGlobalAIChats().map((chat) => chat.id),
+        [globalChat.id]
+      )
+      assert.deepEqual([...manager.getAIChatCountsBySession()], [['session-1', 1]])
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('persists entity references with their user message and preserves them when forking', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const globalChat = manager.createGlobalAIChat('Global', 'general_cn')
+      const userMessage = manager.addMessage(
+        globalChat.id,
+        'user',
+        'Compare them',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        entityRefs
+      )
+      const assistantMessage = manager.addMessage(
+        globalChat.id,
+        'assistant',
+        'I will compare them.',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        entityRefs
+      )
+
+      assert.deepEqual(manager.getMessages(globalChat.id)[0]?.entityRefs, entityRefs)
+      assert.deepEqual(manager.getHistoryForAgent(globalChat.id)[0]?.entityRefs, entityRefs)
+      assert.equal(assistantMessage.entityRefs, undefined)
+      assert.equal(manager.getMessages(globalChat.id)[1]?.entityRefs, undefined)
+      assert.equal(manager.getHistoryForAgent(globalChat.id)[1]?.entityRefs, undefined)
+
+      const insertedAssistant = manager.insertMessageAfter(
+        globalChat.id,
+        userMessage.id,
+        'assistant',
+        'Updated comparison',
+        undefined,
+        undefined,
+        entityRefs
+      )
+      assert.equal(insertedAssistant.entityRefs, undefined)
+
+      const fork = manager.forkAIChat(globalChat.id, userMessage.id)
+      assert.equal(fork.kind, 'global')
+      assert.deepEqual(manager.getMessages(fork.id)[0]?.entityRefs, entityRefs)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})
+
+describe('AIChatManager message persistence and editing', () => {
+  it('persists a user and assistant message atomically', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const chat = manager.createAIChat('s1', 'Atomic turn', 'general_cn')
+      const refs: AIEntityRef[] = [{ type: 'contact', contactKey: 'qq:10001', displayName: 'Alice' }]
+      const usage = {
+        promptTokens: 1,
+        completionTokens: 2,
+        totalTokens: 3,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      }
+      const saved = manager.addMessagePair(
+        chat.id,
+        { content: 'question', entityRefs: refs },
+        { content: 'answer', contentBlocks: [{ type: 'text', text: 'answer' }], tokenUsage: usage }
+      )
+
+      assert.equal(saved.assistantMessage.parentId, saved.userMessage.id)
+      assert.deepEqual(saved.userMessage.entityRefs, refs)
+      assert.deepEqual(saved.assistantMessage.contentBlocks, [{ type: 'text', text: 'answer' }])
+      assert.deepEqual(manager.getAIChatTokenUsage(chat.id), usage)
+
+      const messagesBeforeFailure = manager.getMessages(chat.id)
+      manager.executeAiSQL(`
+        CREATE TRIGGER reject_assistant_message
+        BEFORE INSERT ON ai_message
+        WHEN NEW.role = 'assistant'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected assistant failure');
+        END
+      `)
+
+      assert.throws(
+        () => manager.addMessagePair(chat.id, { content: 'orphan' }, { content: 'must roll back' }),
+        /injected assistant failure/
+      )
+      assert.deepEqual(manager.getMessages(chat.id), messagesBeforeFailure)
+      assert.equal(manager.getAIChat(chat.id)?.activeMessageId, saved.assistantMessage.id)
+      assert.deepEqual(manager.getAIChatTokenUsage(chat.id), usage)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('replaces only the latest message round atomically', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const chat = manager.createAIChat('s1', 'Atomic edited turn', 'general_cn')
+      const firstTurn = manager.addMessagePair(chat.id, { content: 'question' }, { content: 'old answer' })
+      const secondTurn = manager.addMessagePair(chat.id, { content: 'follow up' }, { content: 'follow answer' })
+
+      assert.throws(
+        () =>
+          manager.replaceLatestMessageRound(chat.id, {
+            userMessageId: firstTurn.userMessage.id,
+            userContent: 'must not edit history',
+            assistantMessage: { content: 'must not persist' },
+          }),
+        /Only the latest user message can be edited/
+      )
+
+      const replacement = manager.replaceLatestMessageRound(chat.id, {
+        userMessageId: secondTurn.userMessage.id,
+        userContent: 'edited follow up',
+        assistantMessage: { content: 'new answer' },
+      })
+
+      const replacedMessages = manager.getMessages(chat.id)
+      assert.deepEqual(
+        replacedMessages.map((message) => message.content),
+        ['question', 'old answer', 'edited follow up', 'new answer']
+      )
+      assert.equal(replacement.parentId, secondTurn.userMessage.id)
+      assert.equal(manager.getAIChat(chat.id)?.activeMessageId, replacement.id)
+
+      const messagesBeforeFailure = manager.getMessages(chat.id)
+      manager.executeAiSQL(`
+        CREATE TRIGGER reject_replacement_assistant
+        BEFORE INSERT ON ai_message
+        WHEN NEW.role = 'assistant'
+        BEGIN
+          SELECT RAISE(ABORT, 'injected replacement failure');
+        END
+      `)
+
+      assert.throws(
+        () =>
+          manager.replaceLatestMessageRound(chat.id, {
+            userMessageId: secondTurn.userMessage.id,
+            userContent: 'must roll back',
+            assistantMessage: { content: 'must not persist' },
+          }),
+        /injected replacement failure/
+      )
+      assert.deepEqual(manager.getMessages(chat.id), messagesBeforeFailure)
+      assert.equal(manager.getAIChat(chat.id)?.activeMessageId, replacement.id)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('updateMessageContent atomically replaces or clears user entity references', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const originalRefs: AIEntityRef[] = [{ type: 'contact', contactKey: 'qq:10001', displayName: 'Alice' }]
+      const replacementRefs: AIEntityRef[] = [
+        { type: 'session', sessionId: 'group-2', displayName: 'New Group', sessionType: 'group' },
+      ]
+      const msg = manager.addMessage(
+        conv.id,
+        'user',
+        'original text',
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        originalRefs
+      )
+      manager.addMessage(conv.id, 'assistant', 'reply')
+
+      manager.updateMessageContent(msg.id, 'edited text', replacementRefs)
+
+      assert.equal(manager.getMessages(conv.id)[0]?.content, 'edited text')
+      assert.deepEqual(manager.getMessages(conv.id)[0]?.entityRefs, replacementRefs)
+      assert.deepEqual(manager.getHistoryForAgent(conv.id)[0]?.entityRefs, replacementRefs)
+
+      manager.updateMessageContent(msg.id, 'edited without entities')
+
+      const messagesAfterClear = manager.getMessages(conv.id)
+      assert.equal(messagesAfterClear[0]?.content, 'edited without entities')
+      assert.equal(messagesAfterClear[0]?.entityRefs, undefined)
+      assert.equal(manager.getHistoryForAgent(conv.id)[0]?.entityRefs, undefined)
+      assert.equal(messagesAfterClear[1]?.content, 'reply')
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('updateMessageContent throws for non-existent message', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      assert.throws(() => manager.updateMessageContent('non-existent', 'text'), /Message not found/)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('deleteAndRelinkMessage removes a message and rewires children', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const userMsg = manager.addMessage(conv.id, 'user', 'question')
+      const aiMsg = manager.addMessage(conv.id, 'assistant', 'answer')
+      const followUp = manager.addMessage(conv.id, 'user', 'follow up')
+      manager.addMessage(conv.id, 'assistant', 'follow answer')
+
+      manager.deleteAndRelinkMessage(conv.id, aiMsg.id)
+
+      const messages = manager.getMessages(conv.id)
+      assert.equal(messages.length, 3)
+      assert.deepEqual(
+        messages.map((m) => m.content),
+        ['question', 'follow up', 'follow answer']
+      )
+      // follow up's parent should now be userMsg (was aiMsg)
+      assert.equal(messages[1]?.parentId, userMsg.id)
+      assert.equal(messages[2]?.parentId, followUp.id)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('deleteAndRelinkMessage updates activeMessageId when removing the active leaf', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const userMsg = manager.addMessage(conv.id, 'user', 'question')
+      const aiMsg = manager.addMessage(conv.id, 'assistant', 'answer')
+      assert.equal(manager.getAIChat(conv.id)?.activeMessageId, aiMsg.id)
+
+      manager.deleteAndRelinkMessage(conv.id, aiMsg.id)
+
+      assert.equal(manager.getAIChat(conv.id)?.activeMessageId, userMsg.id)
+      const messages = manager.getMessages(conv.id)
+      assert.equal(messages.length, 1)
+      assert.equal(messages[0]?.content, 'question')
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('insertMessageAfter inserts a message in the middle of a chain', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const userMsg = manager.addMessage(conv.id, 'user', 'question')
+      const followUp = manager.addMessage(conv.id, 'user', 'follow up')
+      manager.addMessage(conv.id, 'assistant', 'follow answer')
+
+      const inserted = manager.insertMessageAfter(conv.id, userMsg.id, 'assistant', 'inserted answer')
+
+      const messages = manager.getMessages(conv.id)
+      assert.equal(messages.length, 4)
+      assert.deepEqual(
+        messages.map((m) => m.content),
+        ['question', 'inserted answer', 'follow up', 'follow answer']
+      )
+      assert.equal(inserted.parentId, userMsg.id)
+      // followUp's parent should be updated to the inserted message
+      assert.equal(messages[2]?.id, followUp.id)
+      assert.equal(messages[2]?.parentId, inserted.id)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('insertMessageAfter appends to the end when no child exists', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const userMsg = manager.addMessage(conv.id, 'user', 'question')
+
+      const inserted = manager.insertMessageAfter(conv.id, userMsg.id, 'assistant', 'new answer')
+
+      const messages = manager.getMessages(conv.id)
+      assert.equal(messages.length, 2)
+      assert.deepEqual(
+        messages.map((m) => m.content),
+        ['question', 'new answer']
+      )
+      assert.equal(inserted.parentId, userMsg.id)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})
+
+describe('AIChatManager chart content blocks', () => {
+  it('persists normalized chart payloads for stable replay', () => {
+    const dir = createTempDir()
+    try {
+      const chart: ChartPayload = {
+        version: 1,
+        spec: {
+          version: 1,
+          type: 'bar',
+          title: 'Messages by member',
+          encoding: { x: 'name', y: 'message_count' },
+        },
+        dataset: {
+          columns: [
+            { name: 'name', type: 'category' },
+            { name: 'message_count', type: 'integer' },
+          ],
+          rows: [
+            { name: 'Alice', message_count: 4 },
+            { name: 'Bob', message_count: 3 },
+          ],
+        },
+        data: {
+          labels: ['Alice', 'Bob'],
+          values: [4, 3],
+        },
+        rowCount: 2,
+      }
+
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Chart Replay', 'general_cn')
+      manager.addMessage(conv.id, 'user', 'draw a chart')
+      manager.addMessage(conv.id, 'assistant', 'Here is the chart.', undefined, undefined, [{ type: 'chart', chart }])
+      manager.close()
+
+      const reloaded = createManager(dir)
+      const messages = reloaded.getMessages(conv.id)
+      const block = messages[1]?.contentBlocks?.[0]
+
+      if (!block || block.type !== 'chart') {
+        assert.fail('Expected a chart content block')
+      }
+      assert.deepEqual(block?.chart, chart)
+      reloaded.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})
+
+describe('AIChatManager deleteMessagesFrom', () => {
+  it('deletes the target message and all subsequent messages', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const user1 = manager.addMessage(conv.id, 'user', 'q1')
+      manager.addMessage(conv.id, 'assistant', 'a1')
+      manager.addMessage(conv.id, 'user', 'q2')
+      manager.addMessage(conv.id, 'assistant', 'a2')
+
+      manager.deleteMessagesFrom(conv.id, user1.id)
+
+      const messages = manager.getMessages(conv.id)
+      assert.equal(messages.length, 0)
+      assert.equal(manager.getAIChat(conv.id)?.activeMessageId, null)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('deletes from a mid-chain message, preserving earlier ones', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Test', 'general_cn')
+      const user1 = manager.addMessage(conv.id, 'user', 'q1')
+      const ai1 = manager.addMessage(conv.id, 'assistant', 'a1')
+      manager.addMessage(conv.id, 'user', 'q2')
+      manager.addMessage(conv.id, 'assistant', 'a2')
+
+      manager.deleteMessagesFrom(conv.id, ai1.id)
+
+      const messages = manager.getMessages(conv.id)
+      assert.equal(messages.length, 1)
+      assert.equal(messages[0]?.content, 'q1')
+      assert.equal(manager.getAIChat(conv.id)?.activeMessageId, user1.id)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})
+
+describe('AIChatManager forkAIChat', () => {
+  it('creates a new conversation with copied messages up to the specified point', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Original', 'general_cn')
+      manager.addMessage(conv.id, 'user', 'q1')
+      manager.addMessage(conv.id, 'assistant', 'a1')
+      const q2 = manager.addMessage(conv.id, 'user', 'q2')
+      manager.addMessage(conv.id, 'assistant', 'a2')
+
+      const forked = manager.forkAIChat(conv.id, q2.id, 'Forked')
+
+      assert.notEqual(forked.id, conv.id)
+      assert.equal(forked.title, 'Forked')
+      assert.equal(forked.sessionId, 's1')
+
+      const forkedMessages = manager.getMessages(forked.id)
+      assert.equal(forkedMessages.length, 3)
+      assert.deepEqual(
+        forkedMessages.map((m) => m.content),
+        ['q1', 'a1', 'q2']
+      )
+
+      // Original conversation should be untouched
+      const originalMessages = manager.getMessages(conv.id)
+      assert.equal(originalMessages.length, 4)
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('uses default fork title when none provided', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'MyChat', 'general_cn')
+      manager.addMessage(conv.id, 'user', 'q1')
+      const a1 = manager.addMessage(conv.id, 'assistant', 'a1')
+
+      const forked = manager.forkAIChat(conv.id, a1.id)
+
+      assert.equal(forked.title, 'MyChat (fork)')
+      const forkedMessages = manager.getMessages(forked.id)
+      assert.equal(forkedMessages.length, 2)
+      assert.deepEqual(
+        forkedMessages.map((m) => m.content),
+        ['q1', 'a1']
+      )
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})
+
+describe('AIChatManager getHistoryForAgent content blocks', () => {
+  it('returns persisted contentBlocks so tool calls can be replayed', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'History', 'general_cn')
+      manager.addMessage(conv.id, 'user', 'find birthday messages')
+      manager.addMessage(conv.id, 'assistant', 'Searching… found 3.', undefined, undefined, [
+        { type: 'text', text: 'Searching… ' },
+        {
+          type: 'tool',
+          tool: {
+            name: 'search_messages',
+            displayName: 'search_messages',
+            status: 'done',
+            params: { query: 'birthday' },
+            toolCallId: 'call_xyz',
+            result: 'found 3 messages',
+          },
+        },
+        { type: 'text', text: 'found 3.' },
+      ])
+
+      const history = manager.getHistoryForAgent(conv.id)
+      assert.equal(history.length, 2)
+      assert.equal(history[0].contentBlocks, undefined)
+      const blocks = history[1].contentBlocks
+      assert.ok(blocks, 'assistant message should carry contentBlocks')
+      const toolBlock = blocks.find((b) => b.type === 'tool')
+      assert.ok(toolBlock && toolBlock.type === 'tool')
+      assert.equal(toolBlock.tool.toolCallId, 'call_xyz')
+      assert.equal(toolBlock.tool.result, 'found 3 messages')
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+
+  it('keeps contentBlocks on buffer messages after a summary boundary', () => {
+    const dir = createTempDir()
+    try {
+      const manager = createManager(dir)
+      const conv = manager.createAIChat('s1', 'Summary', 'general_cn')
+      manager.addMessage(conv.id, 'user', 'old question')
+      manager.addMessage(conv.id, 'assistant', 'old answer')
+      // 边界之后的消息（带工具块）应保留 contentBlocks
+      const late = manager.addMessage(conv.id, 'assistant', 'late answer', undefined, undefined, [
+        {
+          type: 'tool',
+          tool: { name: 'search_messages', displayName: 's', status: 'done', toolCallId: 'call_late', result: 'r' },
+        },
+        { type: 'text', text: 'late answer' },
+      ])
+      const boundaryTs = Math.floor(Date.now() / 1000) + 100
+      manager.executeAiSQL(`UPDATE ai_message SET timestamp = ${boundaryTs} WHERE id = '${late.id}'`)
+      manager.addSummaryMessage(conv.id, 'summary of old context', {
+        bufferBoundaryTimestamp: boundaryTs,
+        compressedMessageCount: 2,
+      })
+
+      const history = manager.getHistoryForAgent(conv.id)
+      assert.equal(history[0].role, 'summary')
+      const lateMsg = history.find((m) => m.content === 'late answer')
+      assert.ok(lateMsg?.contentBlocks?.some((b) => b.type === 'tool'))
+      manager.close()
+    } finally {
+      cleanup(dir)
+    }
+  })
+})

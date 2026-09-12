@@ -2,41 +2,64 @@
   "title": "設定",
   "tabs": {
     "basic": "基本設定",
+    "navigation": "ナビゲーション",
     "ai": "AI 設定",
-    "aiConfig": "チャットモデル",
-    "aiRAG": "埋め込みモデル",
-    "aiPrompt": "チャット設定",
-    "aiPreset": "旧版プロンプト",
+    "aiConfig": "モデルサービス",
+    "aiDefaultModel": "デフォルトモデル",
+    "semanticIndex": "セマンティックインデックス",
+    "chatPreferences": "会話設定",
     "aiPreprocess": "前処理",
     "dataManage": "データ管理",
     "storage": "ストレージ管理",
-    "storageManage": "ストレージ管理",
-    "sessionManage": "セッション管理",
+    "security": "セキュリティ",
+    "sessionManage": "セッションインデックス",
     "about": "ChatLabについて",
-    "api": "API サービス"
+    "api": "オートメーション",
+    "apiSubTabs": {
+      "autoSync": "自動同期",
+      "apiService": "API サービス",
+      "mcp": "MCP"
+    }
   },
   "basic": {
+    "general": {
+      "title": "一般"
+    },
+    "preferences": {
+      "title": "環境設定"
+    },
     "language": {
-      "title": "言語",
       "description": "アプリの表示言語を選択します"
     },
     "appearance": {
       "title": "外観設定",
       "themeMode": "テーマモード",
+      "insightCardTheme": "インサイトカードの配色",
+      "insightCardThemeOption": "配色 {index}",
       "auto": "システムに従う",
       "light": "ライトモード",
       "dark": "ダークモード"
     },
     "defaultTab": {
-      "title": "デフォルトタブ",
-      "description": "セッションに入った時に表示するページ",
-      "overview": "概要",
+      "description": "チャットに入った時に表示するページ",
+      "insights": "インサイト",
       "aiChat": "AI チャット"
     },
-    "screenshot": {
-      "title": "スクリーンショット設定",
-      "mobileAdapt": "モバイル対応",
-      "mobileAdaptDesc": "スクリーンショット時に幅を自動調整し、モバイル端末での閲覧に最適化します"
+    "autoLaunch": {
+      "openAtLogin": "ログイン時に自動起動",
+      "openAtLoginDesc": "システム起動時に ChatLab を自動的に実行します",
+      "devModeHint": "開発モードでは利用できません"
+    },
+    "closeBehavior": {
+      "label": "メインウィンドウを閉じるとき",
+      "background": "バックグラウンドで実行",
+      "quit": "アプリを終了"
+    },
+    "toolsPanel": {
+      "positionLabel": "ツールパネルの位置",
+      "positionDesc": "クイックツールパネルの表示位置を選択します",
+      "positionSide": "サイド",
+      "positionHeader": "ヘッダー"
     },
     "network": {
       "title": "ネットワーク設定",
@@ -58,30 +81,55 @@
       "saveFailed": "保存に失敗しました"
     }
   },
+  "navigation": {
+    "title": "ナビゲーションレイアウト",
+    "description": "分析機能をサイドバーの第1階層またはインサイト内の第2階層に配置します。変更は保存後に反映されます。",
+    "invalidLayout": "保存済みのナビゲーションレイアウトを読み込めないため、プラグインのデフォルトを使用しています。保存またはリセットすると無効な設定が置き換えられます。",
+    "loadFailed": "保存済みのナビゲーションレイアウトを読み込めませんでした。一時的にプラグインのデフォルトを表示しています。アプリを再読み込みして再試行してください。読み込みに成功するまで保存とリセットはできません。",
+    "primary": "第1階層",
+    "inGroup": "第2階層 · {group}",
+    "group": "第2階層ナビゲーショングループ",
+    "hidden": "非表示",
+    "moveUp": "上へ移動",
+    "moveDown": "下へ移動",
+    "locationFor": "{title} のナビゲーション位置を設定",
+    "unavailable": "プラグインを利用できません",
+    "emptyGroup": "このグループには現在ナビゲーション項目がありません。",
+    "saved": "ナビゲーションレイアウトを保存しました",
+    "saveFailed": "ナビゲーションレイアウトを保存できませんでした",
+    "reset": "デフォルトに戻す",
+    "resetDone": "デフォルトのナビゲーションレイアウトに戻しました",
+    "resetFailed": "デフォルトのナビゲーションレイアウトに戻せませんでした",
+    "storageHint": "Desktop と CLI Web は .chatlab 内のこのレイアウトを共有します。"
+  },
+  "defaultModel": {
+    "title": "デフォルトモデル",
+    "noConfigs": "先に「モデルサービス」でモデル設定を追加してください",
+    "selectProvider": "プロバイダーを選択",
+    "selectModel": "モデルを選択",
+    "assistantModel": {
+      "label": "デフォルトアシスタントモデル",
+      "description": "AIチャット、ツール呼び出し、SQLアシスタント、コンテキスト圧縮に使用"
+    },
+    "fastModel": {
+      "label": "高速モデル",
+      "description": "セッション要約生成に使用。未設定の場合はデフォルトアシスタントモデルを使用",
+      "followAssistant": "デフォルトアシスタントモデルに従う"
+    }
+  },
   "aiConfig": {
-    "title": "チャットモデル",
-    "loading": "読み込み中...",
-    "inUse": "使用中",
+    "title": "モデルサービス",
     "defaultModel": "デフォルトモデル",
-    "localService": "ローカルサービス",
-    "customEndpoint": "カスタムエンドポイント",
-    "edit": "編集",
-    "delete": "削除",
     "empty": {
       "title": "AI サービスが未設定です",
       "description": "設定を追加して AI を使い始めましょう"
     },
-    "addConfig": "設定を追加",
+    "addConfig": "サービスを追加",
     "maxConfigs": "設定は最大 10 件までです",
     "modal": {
-      "addConfig": "設定を追加",
-      "editConfig": "設定を編集",
-      "officialApi": "公式 API",
-      "officialApiDesc": "DeepSeek や Gemini など",
+      "addConfig": "サービスを追加",
+      "editConfig": "サービスを編集",
       "localService": "ローカルサービス",
-      "localServiceDesc": "Ollama など",
-      "openaiCompatible": "OpenAI 互換",
-      "openaiCompatibleDesc": "カスタムエンドポイント",
       "configName": "設定名",
       "optional": "（任意）",
       "configNamePlaceholderPreset": "空欄の場合、サービス名が使用されます",
@@ -94,22 +142,50 @@
       "validate": "接続確認",
       "validationSuccess": "接続を確認しました",
       "validationFailed": "接続の確認に失敗しました",
+      "validationFailedTitle": "API接続の検証に失敗しました",
+      "saveAnywayHint": "検証に通過しませんでした。設定が正しくない可能性があります。それでも保存しますか？",
+      "saveAnyway": "保存する",
       "validationError": "検証に失敗：",
       "model": "モデル",
-      "modelName": "モデル名",
-      "modelNamePlaceholder": "例: gpt-4、claude-3",
-      "modelNamePlaceholderLocal": "例: qwen3、deepseek-r1",
-      "modelNameHint": "API がサポートするモデル名を入力",
-      "modelNameHintLocal": "ローカルにデプロイしたモデル名を入力",
-      "apiEndpoint": "API エンドポイント",
+      "apiEndpoint": "API URL",
       "apiEndpointHint": "OpenAI 互換形式の API エンドポイント",
-      "disableThinking": "思考モードをオフ",
-      "disableThinkingDesc": "Qwen3 や DeepSeek-R1 などのモデル向け。オフにすると標準のツール実行形式を使います",
-      "isReasoningModel": "推論モデル",
-      "isReasoningModelDesc": "有効にすると推論過程を抽出し、ツール実行を無効にします（DeepSeek-R1、QwQ など）",
-      "advancedOptions": "詳細設定",
+      "resolvedUrl": "実際のリクエストURL:",
+      "fetchModels": "APIから取得",
+      "fetchModelsTitle": "リモートモデル一覧",
+      "fetchModelsLoading": "モデルリストを取得中...",
+      "fetchModelsEmpty": "モデルが見つかりません",
+      "fetchModelsError": "モデルリストの取得に失敗しました",
+      "fetchModelsCount": "全 {total} モデル、{shown} 件表示中",
+      "modelAdded": "追加済み",
+      "addAllModels": "すべて追加",
+      "searchModels": "モデルを検索...",
+      "apiEndpointOverrideHint": "デフォルトURLは入力済みです。必要に応じて変更してください",
       "customService": "カスタムサービス",
-      "unnamedConfig": "名称未設定"
+      "visitWebsite": "公式サイト",
+      "getApiKey": "APIキーを取得",
+      "presetService": "プリセット",
+      "thirdPartyService": "サードパーティ",
+      "addCustomModel": "モデルを追加",
+      "deleteCustomModel": "選択を削除",
+      "customModelId": "モデルエンドポイント名",
+      "customModelIdHint": "API呼び出しで使用されるモデル識別子",
+      "customModelDisplayName": "表示名",
+      "customModelDisplayNamePlaceholder": "カスタム表示名",
+      "editModel": "モデルを編集",
+      "contextWindow": "コンテキストウィンドウ",
+      "contextWindowPlaceholder": "例: 128000",
+      "contextWindowHint": "モデルがサポートする最大コンテキストトークン数（コンテキスト圧縮に使用）",
+      "contextWindowMissing": "コンテキストウィンドウが未設定です。デフォルト値が使用されます。「モデル編集」から手動で設定してください",
+      "modelRequired": "少なくとも 1 つのモデルを追加してから保存してください",
+      "apiFormat": "API インターフェース",
+      "apiFormatOpenAI": "OpenAI Completions",
+      "apiFormatAnthropic": "Anthropic",
+      "apiFormatGemini": "Gemini",
+      "apiFormatOpenAIResponses": "OpenAI Responses"
+    },
+    "providerKind": {
+      "aggregator": "アグリゲータ",
+      "custom": "カスタム"
     }
   },
   "storage": {
@@ -117,33 +193,53 @@
     "description": "ChatLab がローカルに保存したデータファイルを管理します",
     "dataLocation": {
       "title": "データディレクトリの場所",
-      "description": "ローカルデータとキャッシュの保存先をカスタマイズ",
+      "description": "チャットデータベースとベクトルインデックスの保存先をカスタマイズ",
+      "managedDescription": "この設定で管理するのはチャットデータベースとベクトルインデックスのみです。AI 会話、キャッシュ、ログは固定のシステムデータディレクトリに残ります。",
       "choose": "場所を選択",
+      "applyPath": "適用",
       "reset": "デフォルトに戻す",
       "open": "開く",
-      "restartTip": "ディレクトリ変更後はアプリを再起動してください。旧ディレクトリのキャッシュは自動で移行されます",
+      "serverPathHint": "CLI サーバーを実行しているマシンからアクセスできる絶対パスを入力してください。",
+      "migrateHint": "チャットデータベースのデータがまだ旧ディレクトリにあります。統一ディレクトリへの移行をお勧めします：",
+      "ignoreMigrateHint": "無視",
+      "migrateAction": "今すぐ移行",
+      "restartTip": "ディレクトリ変更後はアプリを再起動してください。チャットデータベースのデータは選択に応じて移行されます",
+      "cliRestartTip": "ディレクトリ変更後は CLI サーバーを再起動してください。チャットデータベースのデータはサーバー起動前に移行されます",
       "confirmTitle": "データディレクトリの切り替えを確認",
-      "confirmMessage": "データの保存先を切り替えます。既存データは新しいディレクトリに移行されます。",
+      "confirmMessage": "チャットデータベースのディレクトリを切り替えます。移行を選択すると、既存のチャットデータベースのデータが新しいディレクトリへコピーされます。",
       "newPath": "新しいディレクトリパス",
       "defaultPath": "デフォルトの場所",
-      "confirmWarning": "アプリ再起動後、旧データディレクトリは自動的に削除されます。新しいディレクトリパスが正しいことを確認してください。",
+      "confirmWarning": "アプリ再起動後、チャットデータベースは新しい場所へ移行され、旧ディレクトリはバックアップとして保持されます。",
+      "cliConfirmWarning": "CLI サーバー再起動後、チャットデータベースは新しい場所へ移行され、旧ディレクトリはバックアップとして保持されます。サーバープロセスに書き込み権限があることを確認してください。",
+      "pathRequired": "データディレクトリパスを入力してください",
+      "installDirForbidden": "データディレクトリをアプリのインストールディレクトリ内に配置することはできません。更新時にディレクトリが消去されます",
       "cancel": "キャンセル",
       "confirm": "切り替えを確認",
-      "migrationSuccessTitle": "データ移行が完了しました",
+      "migrationQueuedTitle": "データ移行を予約しました",
       "migrationSuccessMessage": "変更を反映するにはアプリの再起動が必要です。",
-      "relaunchNow": "今すぐ再起動"
+      "cliMigrationSuccessMessage": "現在の CLI サーバーを停止してから再起動してください。移行はサーバー起動前に実行されます。再起動後にページを開き直すと新しいディレクトリを確認できます。",
+      "relaunchNow": "今すぐ再起動",
+      "acknowledge": "了解",
+      "cleanupNoticeTitle": "新しいデータディレクトリへ切り替えました",
+      "cleanupNoticeDescription": "データ損失を防ぐため、元のディレクトリはバックアップとして保持されています。チャット履歴が完全であることを確認してから、ストレージ管理で削除してください。",
+      "cleanupOldPath": "元のデータディレクトリ",
+      "cleanupLater": "後で",
+      "cleanupGoToStorage": "ストレージ管理を開く",
+      "cleanupTitle": "クリーンアップ待ちの旧データ",
+      "cleanupDescription": "移行前のディレクトリはバックアップとして保持されています。新しいディレクトリのチャット履歴を確認した後、手動で削除できます。",
+      "cleanupDeleteAction": "旧データを削除",
+      "cleanupDeleteConfirmTitle": "旧データを完全に削除しますか？",
+      "cleanupDeleteConfirmDescription": "この操作は元に戻せません。新しいディレクトリのチャット履歴が完全であることを確認してから、以下の元ディレクトリを削除してください。",
+      "cleanupDeleteConfirmAction": "完全に削除",
+      "cleanupDeleteFailed": "旧データを削除できませんでした"
     },
+    "openRootDir": "ルートを開く",
     "totalUsage": "合計使用量：",
     "loading": "読み込み中...",
     "files": "ファイル",
     "notExist": "存在しません",
     "clear": "クリア",
     "open": "開く",
-    "notes": {
-      "title": "注意事項",
-      "logSafe": "ログファイルは主にバグ調査用です。安全にクリアできます",
-      "noRecover": "クリアしたファイルは復元できません。慎重に操作してください"
-    },
     "cache": {
       "databases": {
         "name": "チャット履歴データベース",
@@ -153,10 +249,6 @@
         "name": "AI 会話データベース",
         "description": "AI チャット履歴と設定ファイル"
       },
-      "downloads": {
-        "name": "ダウンロードディレクトリ",
-        "description": "スクリーンショットや分析結果などを含む"
-      },
       "statsCache": {
         "name": "キャッシュデータ",
         "description": "チャット記録の統計キャッシュ。クリア後に自動で再構築されます"
@@ -165,50 +257,143 @@
         "name": "ログファイル",
         "description": "アプリの実行ログ（インポート、AI、エラーなどのログを含む）"
       }
-    },
+    }
+  },
+  "ai": {
     "session": {
       "title": "セッションインデックス設定",
       "description": "セッションインデックスは時間間隔に応じてチャット履歴を自動で区切り、AI 分析や閲覧をしやすくします",
       "defaultThreshold": "デフォルト分割間隔",
       "thresholdUnit": "分",
       "thresholdHelp": "この時間を超える間隔があるメッセージは新しいセッションに分割されます",
-      "notGenerated": "セッションインデックスが未生成です",
-      "generateHint": "生成すると、AI が会話の流れをより正確に把握できます",
-      "generate": "インデックスを生成",
-      "regenerate": "再生成",
       "generating": "作成中",
-      "sessionCount": "{count} セッション",
-      "generated": "セッションインデックス生成済み",
-      "generateSuccess": "セッションインデックスの生成に成功しました。全 {count} セッション",
-      "generateError": "生成に失敗しました",
       "batchTitle": "インデックスを一括生成",
       "totalSessions": "全 {count} チャット",
       "generatedCount": "生成済み {count} 件",
       "notGeneratedCount": "未生成 {count} 件",
       "loadingStatus": "読み込み中...",
       "batchGenerate": "未生成分を作成",
-      "batchRegenerate": "すべて再生成"
+      "batchRegenerate": "すべて再生成",
+      "batchRegenerateConfirmTitle": "再生成の確認",
+      "batchRegenerateConfirmMessage": "この操作により、既存のAI要約がすべてクリアされ、セッションインデックスが最初から再生成されます。",
+      "batchRegenerateConfirmWarning": "既存の要約は上書きされます。この操作は取り消せません。",
+      "summaryStrategy": "要約の詳細度",
+      "summaryStrategyHelp": "AI が要約を生成する際の詳細さを設定します",
+      "summaryBrief": "簡潔",
+      "summaryStandard": "標準"
+    },
+    "semanticIndex": {
+      "title": "セマンティックインデックス",
+      "description": "選択したベクトルモデルでチャット履歴のインデックスを作成します。有効にすると、AI は回答時に関連する過去の断片を意味検索して裏付けとして利用できます。",
+      "vectorModel": "ベクトルモデル",
+      "selectModel": "ベクトルモデルを選択",
+      "switchModel": "モデルを切り替え",
+      "noModelSelected": "ベクトルモデル未選択",
+      "modelModalTitle": "ベクトルモデルの設定",
+      "modeLocal": "ローカルモデル",
+      "modeApi": "API",
+      "recommended": "推奨",
+      "approxSize": "約 {mb} MB",
+      "modelDownloadSource": "モデルのダウンロード元",
+      "downloadSourceOfficial": "Hugging Face 公式",
+      "downloadSourceMirror": "HF-Mirror（中国本土向け）",
+      "mirrorSourceHint": "HF-Mirror は中国本土のネットワーク向けの第三者公開ミラーです。モデルファイルは hf-mirror.com からダウンロードされます。",
+      "localDownloadHint": "保存後にモデルが自動でダウンロードされます。初回は時間がかかる場合があります。",
+      "localRuntimeDownloadHint": "CLI Web のローカルモデル実行コンポーネントは約 370 MB です。プリインストールされていない場合、初回使用時に自動インストールされます。保存後に選択したモデルもダウンロードされます。",
+      "apiTemplate": "サービステンプレート",
+      "modelName": "モデル名",
+      "apiKeySaved": "保存済み。空欄で変更しません",
+      "apiKeyHint": "API キーは別途安全に保存され、設定には参照のみが保存されます。",
+      "apiCostWarning": "API モードはプロバイダー費用が発生する場合があります。価格をご確認ください。",
+      "changeRebuildHint": "モデルや API を変更すると、有効な会話は再構築が必要です。",
+      "modelDownloading": "モデルをダウンロード中です。初回は数分かかる場合があります…",
+      "runtimeInstalling": "ローカルモデル実行コンポーネントをインストールしています。初回は時間がかかる場合があります…",
+      "modelError": "ローカルモデルの準備に失敗しました。インデックス構築時に再試行されます。",
+      "searchMaxResults": {
+        "label": "1回の検索で返す断片数",
+        "hint": "AI がセマンティック検索を実行する際に返す関連断片のデフォルト数（5〜15）。必要に応じて AI が増やせます。"
+      },
+      "overview": "インデックス概要",
+      "enabledCount": "{count} 件の会話で有効",
+      "coverage": "カバレッジ {percent}%",
+      "buildPending": "保留中のインデックスを作成",
+      "cleanup": "未使用インデックスを整理",
+      "cleanupConfirm": "無効化した会話や旧モデルのインデックスデータを削除します。チャット記録は削除されません。",
+      "configFirst": "先にベクトルモデルを設定してください",
+      "selectConversations": "会話を選択",
+      "enabledSessions": "有効な会話",
+      "state": {
+        "completed": "完了",
+        "building": "作成中",
+        "pending": "未作成",
+        "needsRebuild": "再構築が必要",
+        "failed": "失敗",
+        "paused": "一時停止"
+      },
+      "action": {
+        "build": "インデックス作成",
+        "pause": "一時停止",
+        "cancel": "キャンセル",
+        "rebuild": "再構築",
+        "remove": "削除"
+      },
+      "session": {
+        "statusLabel": "状態",
+        "notEnabled": "未有効",
+        "coverageLabel": "カバレッジ",
+        "progressLabel": "構築の進捗",
+        "enableHint": "有効にすると、この会話に関する質問に答える際に AI が過去のチャット断片を検索できます。",
+        "configFirst": "有効化の前に 設定 > AI > セマンティックインデックス でベクトルモデルを設定してください。",
+        "enable": "インデックスを有効化",
+        "buildVsEnable": "有効化：この会話をセマンティック検索の対象に含めます。作成：全メッセージを読み込みベクトルを生成します。ローカル計算や API 枠を消費する場合があります。",
+        "retry": "再試行",
+        "continue": "続行"
+      },
+      "picker": {
+        "title": "会話を選択",
+        "all": "すべて",
+        "group": "グループ",
+        "private": "個人",
+        "searchPlaceholder": "名前で検索",
+        "messages": "{count} 件のメッセージ",
+        "enabled": "有効",
+        "selectedSummary": "{count} 件の会話を選択、約 {messages} 件のメッセージ",
+        "confirmRemoveTitle": "削除の確認",
+        "confirmRemoveMessage": "これらの会話のセマンティックインデックスは即座に削除され、復元できません。"
+      }
     }
   },
   "aiPrompt": {
     "chatSettings": {
-      "title": "チャット設定"
+      "title": "ツール設定"
     },
     "exportSettings": {
       "title": "エクスポート設定"
     },
-    "skillSettings": {
-      "title": "スキル設定",
+    "chatPreferences": {
+      "title": "会話設定",
       "enableAutoSkill": "AI 自動スキル選択",
-      "enableAutoSkillDesc": "有効にすると、AI がユーザーの質問に基づいて適切な分析スキルを自動的にマッチして有効化します。無効にすると、手動で選択した場合のみスキルが適用されます"
+      "enableAutoSkillDesc": "有効にすると、AI がユーザーの質問に基づいて適切な分析スキルを自動的にマッチして有効化します。無効にすると、手動で選択した場合のみスキルが適用されます",
+      "chartAutoMode": {
+        "title": "グラフ自動生成",
+        "description": "グラフアシスタントを手動選択していないときに、AI がどの程度積極的にグラフを使うかを制御します",
+        "explicit": "明確な依頼時",
+        "explicitHint": "明確にグラフを依頼した場合のみ、AI がグラフを生成します。",
+        "suggest": "スマート生成",
+        "suggestHint": "控えめな方針です。分析結果の理解に明確に役立つ場合のみ、AI がグラフを生成します。",
+        "aggressive": "積極生成",
+        "aggressiveHint": "データ分析の場面で、AI がより積極的にグラフを生成します。"
+      }
     },
     "maxMessages": {
       "title": "送信メッセージ数の上限",
       "description": "1 回のリクエストで AI に送る最大メッセージ数です。増やすほど Token 消費は増えますが、分析精度も上がります（初めてなら 2000 推奨）"
     },
-    "maxHistory": {
-      "title": "AI コンテキスト制限",
-      "description": "会話ごとに保持する直近のやり取り数です（1 往復 = ユーザーの質問 + AI の回答）。文脈が長くなりすぎて Token を消費するのを防ぎます"
+    "searchContext": {
+      "title": "検索コンテキストウィンドウ",
+      "description": "検索ヒット時に前後の会話コンテキストを自動的に含めることで、AI がメッセージの背景を理解しやすくなります。0 に設定するとコンテキストなし",
+      "before": "前",
+      "after": "後"
     },
     "exportFormat": {
       "title": "会話エクスポート形式",
@@ -218,77 +403,6 @@
     "sqlExportFormat": {
       "title": "SQL Lab エクスポート形式",
       "description": "SQL クエリ結果をエクスポートする際のファイル形式"
-    },
-    "presets": {
-      "title": "システムプロンプト",
-      "add": "プリセットを追加",
-      "import": "プリセットをインポート",
-      "description": "プロンプトはグループチャットと個人チャットの両方の分析に使用されます。分析タイプに応じて内容が自動的に調整されます"
-    },
-    "preset": {
-      "builtIn": "内蔵",
-      "groupOnly": "グループチャットのみ",
-      "privateOnly": "個人チャットのみ",
-      "view": "表示",
-      "edit": "編集",
-      "copy": "コピー",
-      "delete": "削除"
-    },
-    "modal": {
-      "editBuiltin": "システムプロンプトを編集",
-      "editCustom": "カスタムプロンプトを編集",
-      "addCustom": "カスタムプロンプトを追加",
-      "presetName": "プリセット名",
-      "presetNamePlaceholder": "プリセットの名前を入力",
-      "applicableTo": "適用シーン",
-      "applicableToHint": "（チェックすると対応する分析タイプで使用可能になります）",
-      "groupChat": "グループチャット分析",
-      "privateChat": "個人チャット分析",
-      "systemPrompt": "システムプロンプト",
-      "systemPromptPlaceholder": "AI アシスタントの役割、タスク、回答要件を定義...",
-      "preview": "完全プロンプトプレビュー",
-      "previewHint": "（プレビューはグループチャットモードです。実際は分析タイプに応じて自動調整されます）",
-      "resetToDefault": "デフォルトに戻す",
-      "saveChanges": "変更を保存",
-      "addPreset": "プリセットを追加"
-    },
-    "importPreset": {
-      "title": "プリセットをインポート",
-      "description": "リモートから推奨のシステムプロンプトプリセットを取得します",
-      "loading": "リモートプリセットを読み込み中...",
-      "loadError": "リモートプリセットの読み込みに失敗しました",
-      "noPresets": "利用可能なリモートプリセットがありません",
-      "commonPresets": "共通プリセット",
-      "groupPresets": "グループチャット専用プリセット",
-      "privatePresets": "個人チャット専用プリセット",
-      "add": "追加",
-      "added": "追加済み",
-      "preview": "プレビュー",
-      "systemPrompt": "システムプロンプト",
-      "noDescription": "説明がありません",
-      "fetchingContent": "コンテンツを読み込み中...",
-      "fetchError": "コンテンツの読み込みに失敗しました"
-    },
-    "legacyPrompt": {
-      "title": "旧版プロンプト",
-      "description": "旧プロンプトシステムはすでに AI 会話の実行には使われません。移行期間中に旧設定を確認・コピーするためだけの入口です。",
-      "copyJson": "JSON をコピー",
-      "emptyTitle": "旧版プロンプトデータが見つかりません",
-      "emptyDescription": "この端末には確認できる旧版プロンプト設定がありません。",
-      "activePreset": "以前の有効プリセット",
-      "notConfigured": "記録なし",
-      "customPresetCount": "カスタムプリセット数",
-      "remotePresetCount": "リモート導入数",
-      "parseError": "旧版プロンプトデータの解析に失敗しましたが、先に生の JSON をコピーできます。",
-      "customPresetList": "カスタムプリセット",
-      "noPromptContent": "プロンプト内容の記録がありません",
-      "rawJsonTitle": "元の設定 JSON",
-      "rawJsonHint": "閲覧とコピー専用",
-      "copySuccess": "JSON をクリップボードにコピーしました",
-      "copyFailed": "コピーに失敗しました",
-      "groupOnly": "グループのみ",
-      "privateOnly": "個人のみ",
-      "common": "共通"
     }
   },
   "about": {
@@ -297,52 +411,21 @@
     "version": "バージョン",
     "checkUpdate": "アップデートを確認",
     "checking": "確認中...",
+    "upToDate": "最新バージョンです",
+    "newVersionAvailable": "新しいバージョン {version} があります",
+    "webUpdateHint": "ターミナルで clb update を実行し、サービスを再起動してください。",
+    "updateCheckFailed": "更新確認に失敗しました：{error}",
     "unknown": "不明",
     "privacy": {
       "title": "プライバシー設定",
       "analytics": "匿名利用統計",
-      "analyticsDesc": "有効にすると、バージョン番号やOS情報などの非機密データを収集し、製品の改善に役立てます"
+      "analyticsDesc": "有効にすると、匿名のインストールID、バージョン、OS、アプリ種別、言語、おおよその地域、インポート元のチャットサービス、主要機能の利用状況を送信します。チャット内容、連絡先、ファイル名、パス、モデル名、キーは送信しません"
     },
     "developer": {
       "title": "開発者オプション",
       "debugMode": "DEBUG モード",
-      "debugModeDesc": "有効にすると、AI ログに完全な生メッセージ内容が切り詰められずに記録されます。ログファイルが大幅に増大する可能性があります"
+      "debugModeDesc": "有効にすると、デバッグパネルとクイックデバッグツールが表示されます。データベースの確認、テストツールの実行、より詳細なデバッグログの記録に使用できます。"
     }
-  },
-  "embedding": {
-    "title": "埋め込みモデル",
-    "description": "Embedding ベクトル類似度で質問の意味を理解します。有効にすると AI がセマンティック検索を行えます",
-    "configList": "埋め込み設定",
-    "addConfig": "設定を追加",
-    "editConfig": "設定を編集",
-    "noConfigs": "設定がありません。上のボタンをクリックして追加してください",
-    "active": "使用中",
-    "setActive": "使用する",
-    "deleteConfirm": "設定「{name}」を削除してもよろしいですか？",
-    "configName": "設定名",
-    "configNamePlaceholder": "例：Ollama Embedding",
-    "apiSource": "API ソース",
-    "apiSourceHint": "「チャットモデルを流用」を選ぶと、現在有効なチャットモデルのエンドポイントとキーをそのまま使います",
-    "reuseLLM": "チャットモデルを流用",
-    "customAPI": "カスタム API",
-    "model": "モデル名",
-    "modelPlaceholder": "例: nomic-embed-text",
-    "modelHint": "Ollama でよく使用：nomic-embed-text、mxbai-embed-large",
-    "baseUrl": "API エンドポイント",
-    "baseUrlPlaceholder": "例: http://localhost:11434/v1",
-    "apiKey": "API Key",
-    "apiKeyPlaceholder": "API Key を入力",
-    "optional": "（任意）",
-    "validate": "接続テスト",
-    "validateSuccess": "接続に成功しました！",
-    "validateFailed": "接続に失敗しました",
-    "saveFailed": "保存に失敗しました",
-    "vectorStore": "ベクトルキャッシュ",
-    "vectorStoreDesc": "計算済みのベクトルをキャッシュし、再計算を避けて速度を向上させます",
-    "cached": "キャッシュ済み",
-    "size": "使用量",
-    "clear": "クリア",
-    "clearVectorStoreConfirm": "すべてのベクトルキャッシュをクリアしてもよろしいですか？次回検索時に再計算が必要になります。"
   },
   "aiPreprocess": {
     "title": "チャット履歴の前処理",
@@ -356,9 +439,8 @@
     "denoiseDesc": "感動詞のみ、絵文字のみ、システムプレースホルダー（[画像] など）といった無意味なメッセージを除去します",
     "desensitize": "データマスキング",
     "desensitizeDesc": "ルールに基づいて機密情報（電話番号、メールアドレス、身分証番号など）をプレースホルダーに置換します",
-    "desensitizeRules": "マスキングルール",
-    "desensitizeRulesDesc": "有効にするマスキングルールにチェックを入れてください。リスト順に優先マッチングされます",
     "desensitizeBuiltin": "プリセットルール",
+    "desensitizeResetBuiltin": "既定に戻す",
     "desensitizeCustom": "カスタムルール",
     "desensitizeAddCustom": "カスタムルールを追加",
     "desensitizeRuleName": "ルール名",
@@ -377,6 +459,24 @@
     "blacklistAdd": "追加"
   },
   "desensitize": {
+    "groups": {
+      "credentials": "パスワードと Token",
+      "credentials_desc": "API Key、Bearer Token などの認証情報",
+      "global_contact": "汎用連絡先情報",
+      "global_contact_desc": "メールアドレスなど地域をまたぐ連絡先情報",
+      "global_financial": "汎用金融情報",
+      "global_financial_desc": "クレジットカード番号などの金融識別子",
+      "global_network": "汎用ネットワーク情報",
+      "global_network_desc": "URL、IP アドレスなどのネットワーク識別子",
+      "region_cn": "中国本土",
+      "region_cn_desc": "中国本土の電話番号、証明書、銀行カードなどのルール",
+      "region_us": "米国",
+      "region_us_desc": "米国の電話番号、証明書などのルール",
+      "region_jp": "日本",
+      "region_jp_desc": "日本の電話番号、マイナンバーなどのルール",
+      "region_kr": "韓国",
+      "region_kr_desc": "韓国の電話番号、住民登録番号などのルール"
+    },
     "rules": {
       "cn_phone": "中国の携帯電話番号",
       "cn_phone_desc": "1xx xxxx xxxx 形式の11桁の番号",
@@ -415,11 +515,11 @@
     }
   },
   "api": {
-    "betaWarning": "現在の API バージョンはベータ版であり、インターフェースが変更される可能性があります",
     "service": {
       "title": "API サービス",
       "enable": "API サービスを有効化",
       "enableDesc": "有効にすると、外部ツールが HTTP API 経由でチャットデータの照会・エクスポート・インポートができます。ローカルホストのみ (127.0.0.1)",
+      "socket": "Unix ソケット",
       "portInUseHint": "ポートが使用中です。下のポートを変更するか、このポートを使用しているプログラムを終了してから再試行してください"
     },
     "status": {
@@ -452,24 +552,128 @@
       "every": "",
       "minutes": "分ごと",
       "lastSync": "最終同期",
+      "syncing": "同期中",
+      "messages": "件",
       "addBtn": "データソースを追加",
       "form": {
         "modalTitle": "データソースを追加",
         "name": "名前",
         "namePlaceholder": "例：マイチャットサーバー",
-        "url": "データソース URL",
-        "token": "アクセストークン（任意）",
+        "token": "アクセストークン",
         "tokenPlaceholder": "リモート API の Bearer Token",
         "interval": "取得間隔（分）",
-        "targetSession": "ターゲットセッション ID（任意）",
-        "targetSessionPlaceholder": "空欄の場合、毎回新規セッションを作成",
-        "add": "追加"
+        "pullLimit": "1回の取得メッセージ数",
+        "pullLimitPlaceholder": "デフォルト 1000"
+      },
+      "discovery": {
+        "baseUrl": "サーバーアドレス",
+        "baseUrlPlaceholder": "例：http://127.0.0.1:2333/api/v1",
+        "found": "{count} 件のセッションが見つかりました",
+        "search": "検索",
+        "searchPlaceholder": "セッション名で検索",
+        "selectAll": "すべて選択",
+        "deselectAll": "選択解除",
+        "selectByType": "セッションタイプ",
+        "typeAll": "すべて",
+        "typePrivate": "個人チャット",
+        "typeGroup": "グループチャット",
+        "loadMore": "さらに読み込む",
+        "subscribe": "{count} 件を購読",
+        "messages": "件のメッセージ",
+        "error": "リモートサーバーへの接続に失敗しました",
+        "connectionCheckFailed": "リモートサーバーに接続できません。URL とトークンを確認してください。"
+      },
+      "noSessions": "インポートセッションがありません。上の「サブスクリプション管理」から追加してください",
+      "edit": {
+        "title": "設定を変更",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "editSource": "設定を変更",
+        "manageSessions": "サブスクリプション管理",
+        "subscribed": "購読中"
+      },
+      "deleteConfirm": {
+        "title": "データソースを削除",
+        "message": "データソース「{name}」を削除してもよろしいですか？このデータソース下のすべてのインポート設定が削除されます。既にインポート済みのローカル会話は削除されません。"
+      },
+      "deleteSessionConfirm": {
+        "title": "サブスクリプションを削除",
+        "message": "「{name}」を削除してもよろしいですか？",
+        "keepData": "サブスクリプションのみ削除",
+        "deleteData": "インポートしたチャットも削除"
       }
     },
     "usage": {
       "title": "使用ガイド",
-      "desc": "サービスを有効にした後、以下のエンドポイントでデータを照会できます。すべてのリクエストに Bearer Token 認証が必要です。",
-      "authHint": "ヘッダー例："
+      "desc": "サービスを有効にすると、外部ツールが API 経由でデータを照会したり、ChatLab にチャット記録をプッシュしたりできます。すべてのリクエストに Bearer Token 認証が必要です。",
+      "authHint": "ヘッダー例：",
+      "docLink": "API ドキュメントを見る"
+    }
+  },
+  "mcp": {
+    "overview": {
+      "title": "MCP 概要",
+      "description": "MCP により、AI アシスタントがチャット記録を直接クエリできます。セッション検出、キーワード検索、メンバー統計、時間分布などをサポートしています。",
+      "toolCount": "{count} 個のツール",
+      "resourceCount": "{count} 個のリソース",
+      "installHint": "chatlab-cli をインストール後、AI クライアントに以下の設定を追加してください："
+    },
+    "clients": {
+      "other": "その他"
+    },
+    "config": {
+      "title": "クライアント設定",
+      "clientLabel": "MCP クライアント",
+      "copy": "コピー",
+      "copied": "コピー済み",
+      "claudeHint": "この設定を ClaudeCode の MCP 設定に追加してください。",
+      "codexHint": "この TOML 設定を ~/.codex/config.toml ファイルに追加してください。",
+      "openclawHint": "この設定をプロジェクトの openclaw.json ファイルに追加してください。",
+      "otherHint": "この JSON 設定を MCP クライアントの設定ファイルに追加してください。"
+    },
+    "tips": {
+      "title": "ヒント",
+      "dataDir": "MCP サーバーは ~/.chatlab/ ディレクトリのチャットデータを読み取り、デスクトップアプリと同じデータを共有します。",
+      "readOnly": "すべての操作は読み取り専用で、チャット記録は変更されません。",
+      "nodeRequired": "npx および CLI モードには Node.js 22.19 以上が必要です。",
+      "docs": "詳細なドキュメントは docs.chatlab.fun をご覧ください。"
+    }
+  },
+  "security": {
+    "lock": {
+      "title": "アプリロック",
+      "desc": "4桁のPINでChatLabを保護します",
+      "statusOn": "有効",
+      "statusOff": "無効",
+      "disableBtn": "アプリロックを無効にする",
+      "disableConfirm": "アプリロックを無効にしますか？現在のPINは削除されます。",
+      "manualLock": "今すぐロック"
+    },
+    "password": {
+      "titleSetup": "PIN設定とアプリロック有効化",
+      "titleChange": "PIN変更",
+      "labelOld": "現在のPIN",
+      "labelNew": "新しいPIN",
+      "labelConfirm": "新しいPIN（確認）",
+      "btnEnable": "有効にする",
+      "errorInvalidPin": "PINは4桁の数字で入力してください",
+      "errorMismatch": "PINが一致しません",
+      "errorSameAsOld": "新しいPINを現在のものと同じにしないでください",
+      "errorFailed": "操作に失敗しました。再試行してください"
+    },
+    "autoLock": {
+      "title": "自動ロック",
+      "idleLabel": "アイドル時に自動ロック",
+      "startupLabel": "起動時にロック解除を要求"
+    },
+    "lockScreen": {
+      "titleLocked": "ChatLab はロックされています",
+      "placeholderPassword": "4桁のPINを入力",
+      "btnUnlock": "ロック解除",
+      "verifying": "検証中...",
+      "errorService": "ロック解除に失敗しました。再試行してください",
+      "errorWrongPassword": "PINが正しくありません",
+      "errorTooManyAttempts": "試行回数が多すぎます。{seconds} 秒後に再試行してください"
     }
   }
 }

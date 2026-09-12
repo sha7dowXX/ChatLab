@@ -7,6 +7,7 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
 import { DatePicker } from '@/components/UI'
+import MemberSearchSelect from '@/components/common/member/MemberSearchSelect.vue'
 import type { ChatRecordQuery, FilterFormData } from './types'
 
 const { t } = useI18n()
@@ -14,6 +15,8 @@ const { t } = useI18n()
 const props = defineProps<{
   /** 当前查询条件 */
   query: ChatRecordQuery
+  /** 当前会话 ID，用于分页搜索成员 */
+  sessionId?: string
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +29,7 @@ const emit = defineEmits<{
 // 本地表单数据
 const formData = ref<FilterFormData>({
   messageId: '',
+  memberId: null,
   memberName: '',
   keywords: '',
   startDate: '',
@@ -39,6 +43,7 @@ watch(
     if (query) {
       formData.value = {
         messageId: query.scrollToMessageId?.toString() || '',
+        memberId: query.memberId ?? null,
         memberName: query.memberName || '',
         keywords: query.keywords?.join(', ') || '',
         startDate: query.startTs ? dayjs.unix(query.startTs).format('YYYY-MM-DD') : '',
@@ -65,8 +70,9 @@ function applyFilter() {
     }
   }
 
-  // 成员名称（需要后续通过 API 获取成员 ID）
-  if (f.memberName) {
+  // 成员筛选可与关键词、时间范围组合使用。
+  if (f.memberId !== null) {
+    query.memberId = f.memberId
     query.memberName = f.memberName
   }
 
@@ -107,6 +113,7 @@ function handleKeywordsKeydown(event: KeyboardEvent) {
 function resetFilter() {
   formData.value = {
     messageId: '',
+    memberId: null,
     memberName: '',
     keywords: '',
     startDate: '',
@@ -117,40 +124,37 @@ function resetFilter() {
 </script>
 
 <template>
-  <div class="border-b border-gray-200 px-4 py-3 dark:border-gray-800">
-    <!-- 第一行：消息ID、成员、时间范围 -->
-    <div class="flex items-center gap-3">
+  <div class="overflow-x-auto border-b border-gray-200 px-4 py-2.5 dark:border-gray-800">
+    <div class="flex min-w-[686px] items-center gap-2">
       <UInput
         v-model="formData.messageId"
         type="number"
         :placeholder="t('records.filter.messageId')"
         size="sm"
-        class="w-24"
+        class="w-20 shrink-0"
       />
-      <UInput
-        v-model="formData.memberName"
-        :placeholder="t('records.filter.memberNotSupported')"
-        size="sm"
-        class="w-28"
-        disabled
+      <MemberSearchSelect
+        v-model="formData.memberId"
+        v-model:member-name="formData.memberName"
+        :session-id="sessionId"
+        :placeholder="t('records.filter.memberPlaceholder')"
+        width-class="w-28"
+        @select="applyFilter"
+        @clear="applyFilter"
       />
-      <div class="flex items-center gap-2">
-        <DatePicker v-model="formData.startDate" :placeholder="t('records.filter.startDate')" />
+      <div class="flex shrink-0 items-center gap-1.5">
+        <DatePicker v-model="formData.startDate" :placeholder="t('records.filter.startDate')" width-class="w-28" />
         <span class="text-xs text-gray-400">~</span>
-        <DatePicker v-model="formData.endDate" :placeholder="t('records.filter.endDate')" />
+        <DatePicker v-model="formData.endDate" :placeholder="t('records.filter.endDate')" width-class="w-28" />
       </div>
-    </div>
-
-    <!-- 第二行：关键词和操作按钮 -->
-    <div class="mt-2 flex items-center gap-3">
       <UInput
         v-model="formData.keywords"
         :placeholder="t('records.filter.keywordsPlaceholder')"
         size="sm"
-        class="flex-1"
+        class="min-w-24 max-w-[260px] flex-1"
         @keydown="handleKeywordsKeydown"
       />
-      <div class="flex gap-2">
+      <div class="flex shrink-0 gap-1">
         <UButton color="neutral" variant="ghost" size="sm" @click="resetFilter">
           {{ t('records.filter.reset') }}
         </UButton>

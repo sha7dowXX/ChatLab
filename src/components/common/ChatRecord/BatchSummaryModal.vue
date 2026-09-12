@@ -2,6 +2,8 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useDebounceFn } from '@vueuse/core'
+import { useSessionIndexService } from '@/services'
+import { getSummaryStrategy } from '@/composables/useUiConfig'
 
 const props = defineProps<{
   open: boolean
@@ -45,6 +47,7 @@ interface SessionItem {
   messageCount: number
   // 与 sessionApi 返回值保持一致，历史数据里 summary 可能不存在。
   summary?: string | null
+  summaryMessageCount?: number | null
 }
 const sessions = ref<SessionItem[]>([])
 const isLoading = ref(false)
@@ -120,10 +123,18 @@ const timeRange = computed(() => {
 const canGenerateMap = ref<Record<number, { canGenerate: boolean; reason?: string }>>({})
 const isChecking = ref(false)
 
+function isSummaryStale(session: SessionItem): boolean {
+  return Boolean(session.summary) && session.summaryMessageCount !== session.messageCount
+}
+
+function hasFreshSummary(session: SessionItem): boolean {
+  return Boolean(session.summary) && !isSummaryStale(session)
+}
+
 // 待生成的会话（排除已有摘要的 + 消息太少的）
 const pendingSessions = computed(() => {
   return sessions.value.filter((s) => {
-    if (s.summary) return false
+    if (hasFreshSummary(s)) return false
     const checkResult = canGenerateMap.value[s.id]
     return checkResult?.canGenerate !== false
   })
@@ -131,13 +142,17 @@ const pendingSessions = computed(() => {
 
 // 已有摘要的会话数
 const existingSummaryCount = computed(() => {
-  return sessions.value.filter((s) => s.summary).length
+  return sessions.value.filter(hasFreshSummary).length
+})
+
+const staleSummaryCount = computed(() => {
+  return sessions.value.filter(isSummaryStale).length
 })
 
 // 消息数量太少的会话数（无摘要但无法生成）
 const tooFewMessagesCount = computed(() => {
   return sessions.value.filter((s) => {
-    if (s.summary) return false
+    if (hasFreshSummary(s)) return false
     const checkResult = canGenerateMap.value[s.id]
     return checkResult?.canGenerate === false
   }).length
@@ -165,7 +180,7 @@ async function fetchSessions() {
   try {
     if (queryMode.value === 'range') {
       // 按范围查询：先获取总数，再按百分比计算数量
-      const allSessions = await window.sessionApi.getSessions(props.sessionId)
+      const allSessions = await useSessionIndexService().getSessions(props.sessionId)
       totalSessionCount.value = allSessions.length
       const count = Math.ceil(allSessions.length * (rangePercent.value / 100))
       // 取最近的 count 个会话（按时间倒序取后面的）
@@ -180,7 +195,7 @@ async function fetchSessions() {
       const startTs = Math.floor(timeRange.value.start / 1000)
       const endTs = Math.floor(timeRange.value.end / 1000)
 
-      sessions.value = await window.sessionApi.getByTimeRange(props.sessionId, startTs, endTs)
+      sessions.value = await useSessionIndexService().getByTimeRange(props.sessionId, startTs, endTs)
     }
 
     // 检查哪些会话可以生成摘要
@@ -197,12 +212,12 @@ async function fetchSessions() {
 
 // 批量检查会话是否可以生成摘要
 async function checkCanGenerate() {
-  const noSummaryIds = sessions.value.filter((s) => !s.summary).map((s) => s.id)
+  const noSummaryIds = sessions.value.filter((s) => !hasFreshSummary(s)).map((s) => s.id)
   if (noSummaryIds.length === 0) return
 
   isChecking.value = true
   try {
-    canGenerateMap.value = await window.sessionApi.checkCanGenerateSummary(props.sessionId, noSummaryIds)
+    canGenerateMap.value = await useSessionIndexService().checkCanGenerateSummary(props.sessionId, noSummaryIds)
   } catch (error) {
     console.error('检查会话摘要失败:', error)
   } finally {
@@ -270,7 +285,13 @@ async function startGenerate() {
       if (shouldStop.value) break
 
       try {
-        const result = await window.sessionApi.generateSummary(props.sessionId, session.id, locale.value, false)
+        const result = await useSessionIndexService().generateSummary(
+          props.sessionId,
+          session.id,
+          locale.value,
+          false,
+          getSummaryStrategy()
+        )
 
         if (result.success) {
           // 成功：显示摘要内容
@@ -283,6 +304,7 @@ async function startGenerate() {
           const idx = sessions.value.findIndex((s) => s.id === session.id)
           if (idx !== -1) {
             sessions.value[idx].summary = result.summary || ''
+            sessions.value[idx].summaryMessageCount = sessions.value[idx].messageCount
           }
         } else if (result.error && isTooFewMessagesError(result.error)) {
           // 消息数量太少：标记为跳过
@@ -322,7 +344,7 @@ async function startGenerate() {
   }
 }
 
-// 停止生成
+// 停止生成：保持生成锁定，等待当前循环进入 finally 后统一释放。
 function stopGenerate() {
   shouldStop.value = true
 }
@@ -433,7 +455,7 @@ function close() {
               <p>
                 {{ t('records.batchSummary.found', '找到') }} {{ sessions.length }}
                 {{ t('records.batchSummary.sessionsUnit', '个会话') }}
-                <template v-if="existingSummaryCount > 0 || tooFewMessagesCount > 0">
+                <template v-if="existingSummaryCount > 0 || staleSummaryCount > 0 || tooFewMessagesCount > 0">
                   <span class="text-gray-500">
                     （
                     <template v-if="existingSummaryCount > 0">
@@ -441,7 +463,15 @@ function close() {
                         {{ existingSummaryCount }} {{ t('records.batchSummary.hasSummary', '个已有摘要') }}
                       </span>
                     </template>
-                    <template v-if="existingSummaryCount > 0 && tooFewMessagesCount > 0">，</template>
+                    <template v-if="existingSummaryCount > 0 && (staleSummaryCount > 0 || tooFewMessagesCount > 0)">
+                      ，
+                    </template>
+                    <template v-if="staleSummaryCount > 0">
+                      <span class="text-amber-600 dark:text-amber-400">
+                        {{ staleSummaryCount }} {{ t('records.batchSummary.needsUpdate', '个待更新') }}
+                      </span>
+                    </template>
+                    <template v-if="staleSummaryCount > 0 && tooFewMessagesCount > 0">，</template>
                     <template v-if="tooFewMessagesCount > 0">
                       <span class="text-gray-400">
                         {{ tooFewMessagesCount }} {{ t('records.batchSummary.tooFewMessages', '个消息太少') }}

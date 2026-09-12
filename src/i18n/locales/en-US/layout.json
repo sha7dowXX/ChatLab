@@ -1,16 +1,18 @@
 {
   "brand": "ChatLab",
   "newAnalysis": "New Analysis",
-  "tools": "Tools",
-  "chatHistory": "Chat History",
+  "relationships": "Relationships",
+  "insight": "Footprint",
   "manage": "Manage",
   "noRecords": "No records",
+  "sessionLoadFailed": "Couldn't load conversations",
   "searchPlaceholder": "Search conversation name",
   "noSearchResult": "No matching chat records found",
   "contextMenu": {
     "rename": "Rename",
     "pin": "Pin",
     "unpin": "Unpin",
+    "copyId": "Copy ID",
     "delete": "Delete"
   },
   "renameModal": {
@@ -21,15 +23,31 @@
     "title": "Confirm Delete",
     "message": "Are you sure you want to delete \"{name}\"? This action cannot be undone."
   },
-  "tooltip": {
-    "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar",
-    "hint": "Right-click to rename or delete",
-    "search": "Search chat records"
+  "updateNotice": {
+    "tag": "New",
+    "title": "Update Available",
+    "message": "The latest version is v{version}.",
+    "desktopHint": "Click Update Now to start checking and downloading the desktop update.",
+    "cliHint": "Run the following command in your terminal, then restart the service.",
+    "updateNow": "Update Now",
+    "later": "Later"
   },
-  "sessionInfo": "{count} messages · {time}",
+  "filter": {
+    "all": "All",
+    "private": "Private",
+    "group": "Group"
+  },
+  "sort": {
+    "importedAt": "Import Time",
+    "lastMessageTs": "Last Message",
+    "messageCount": "Message Count"
+  },
+  "tooltip": {
+    "search": "Search chat records",
+    "sort": "Sort"
+  },
+  "sessionInfo": "{count} messages",
   "footer": {
-    "helpAndFeedback": "Help & Feedback",
     "settings": "Settings"
   }
 }

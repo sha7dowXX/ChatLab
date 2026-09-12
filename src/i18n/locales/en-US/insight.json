@@ -1,0 +1,8 @@
+{
+  "title": "Footprint",
+  "reserved": "This view will be available in a future release",
+  "tabs": {
+    "nav": "Footprint views",
+    "relationshipChanges": "Relationship Changes"
+  }
+}

@@ -1,16 +1,18 @@
 {
   "brand": "ChatLab",
   "newAnalysis": "新しいチャットを分析",
-  "tools": "ツール",
-  "chatHistory": "チャット履歴",
+  "relationships": "関係",
+  "insight": "足跡",
   "manage": "管理",
   "noRecords": "記録がありません",
+  "sessionLoadFailed": "チャット履歴を読み込めませんでした",
   "searchPlaceholder": "チャット名を検索",
   "noSearchResult": "一致するチャット記録が見つかりません",
   "contextMenu": {
     "rename": "名前変更",
     "pin": "ピン留め",
     "unpin": "ピン留め解除",
+    "copyId": "IDをコピー",
     "delete": "削除"
   },
   "renameModal": {
@@ -21,15 +23,31 @@
     "title": "削除の確認",
     "message": "チャット記録「{name}」を削除しますか？この操作は取り消せません。"
   },
-  "tooltip": {
-    "expand": "サイドバーを展開",
-    "collapse": "サイドバーを折りたたむ",
-    "hint": "右クリックでチャット記録の削除や名前変更ができます",
-    "search": "チャット記録を検索"
+  "updateNotice": {
+    "tag": "New",
+    "title": "新しいバージョンがあります",
+    "message": "最新バージョンは v{version} です。",
+    "desktopHint": "今すぐ更新をクリックすると、デスクトップ版の更新確認とダウンロードを開始します。",
+    "cliHint": "ターミナルで次のコマンドを実行し、更新後にサービスを再起動してください。",
+    "updateNow": "今すぐ更新",
+    "later": "後で"
   },
-  "sessionInfo": "{count} 件のメッセージ · {time}",
+  "filter": {
+    "all": "すべて",
+    "private": "個人",
+    "group": "グループ"
+  },
+  "sort": {
+    "importedAt": "インポート日時",
+    "lastMessageTs": "最新メッセージ",
+    "messageCount": "メッセージ数"
+  },
+  "tooltip": {
+    "search": "チャット記録を検索",
+    "sort": "並べ替え"
+  },
+  "sessionInfo": "{count} 件のメッセージ",
   "footer": {
-    "helpAndFeedback": "フィードバックとヘルプ",
     "settings": "設定"
   }
 }

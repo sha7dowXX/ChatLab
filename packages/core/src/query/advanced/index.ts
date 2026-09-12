@@ -1,0 +1,73 @@
+/**
+ * 高级分析模块入口（平台无关）
+ *
+ * 所有函数接收 DatabaseAdapter 参数，不依赖全局状态或特定运行时。
+ */
+
+export { getCatchphraseAnalysis } from './repeat'
+export type { CatchphraseAnalysis, MemberCatchphrase, CatchphraseItem } from './repeat'
+
+export { getMentionAnalysis, getLaughAnalysis, getClusterGraph } from './social'
+export type { ClusterGraphData, ClusterGraphNode, ClusterGraphLink, ClusterGraphOptions } from './social'
+
+export { getGroupRelationshipGalaxy, GROUP_RELATIONSHIP_GALAXY_ALGORITHM_VERSION } from './group-relationship-galaxy'
+export type { GroupRelationshipGalaxyOptions } from './group-relationship-galaxy'
+
+export { getRelationshipStats } from './relationship'
+export type {
+  RelationshipStats,
+  RelationshipMonthStats,
+  IceBreakerItem,
+  ResponseLatencyMember,
+  PerseveranceMember,
+  MonthlyResponseLatency,
+  MonthlyPerseverance,
+  RelationshipOptions,
+} from './relationship'
+
+export { getJourneyStats } from './journey'
+export type {
+  JourneyStats,
+  JourneyRange,
+  JourneyMonth,
+  JourneyYear,
+  JourneyMember,
+  JourneySegment,
+  JourneySilence,
+} from './journey'
+
+export { getLanguagePreferenceAnalysis } from './languagePreference'
+export type { NlpProvider, PosTagResult, LanguagePreferenceParams } from './languagePreference'
+
+export {
+  getDragonKingAnalysis,
+  getDivingAnalysis,
+  getCheckInAnalysis,
+  getMemeBattleAnalysis,
+  getNightOwlAnalysis,
+  getRepeatAnalysis,
+} from './ranking'
+export type {
+  NightOwlTitle,
+  NightOwlRankItem,
+  TimeRankItem,
+  ConsecutiveNightRecord,
+  NightOwlChampion,
+  NightOwlAnalysis,
+  DragonKingRankItem,
+  DragonKingAnalysis,
+  DivingRankItem,
+  DivingAnalysis,
+  RepeatStatItem,
+  RepeatRateItem,
+  ChainLengthDistribution,
+  HotRepeatContent,
+  FastestRepeaterItem,
+  RepeatAnalysis,
+  MemeBattleRankItem,
+  MemeBattleRecord,
+  MemeBattleAnalysis,
+  StreakRankItem,
+  LoyaltyRankItem,
+  CheckInAnalysis,
+} from './ranking'

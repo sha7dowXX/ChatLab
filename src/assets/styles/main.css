@@ -1,5 +1,6 @@
 @import 'tailwindcss';
-@source "../../packages";
+@source "../..";
+@source "../../../packages";
 @import '@nuxt/ui';
 @import './markdown.css';
 
@@ -17,11 +18,22 @@
   --color-pink-900: #84173b;
   --color-pink-950: #4a071c;
 
-  /* 分析页面使用的更深背景 - 统一使用 zinc-900 */
-  --color-page-dark: #18181b;
+  /* 页面背景 - 语义化主题 Token，未来可通过设置动态覆盖 */
+  --color-page-bg: #f9fafb;
+  --color-page-dark: #181818;
 
-  /* 模块暗色模式半透明背景色 */
+  /* 卡片背景 - 语义化主题 Token，未来可通过设置动态覆盖 */
+  --color-card-bg: #ffffff;
   --color-card-dark: rgba(255, 255, 255, 0.03);
+
+  /* 悬浮侧栏背景 */
+  --color-sidebar-dark: #202024;
+
+  /* 悬浮表面阴影 - 减少向下偏移，避免底边过重 */
+  --shadow-elevated: 0 10px 28px -12px rgb(15 23 42 / 0.22), 0 3px 10px -4px rgb(15 23 42 / 0.1);
+
+  /* 浮层阴影 - 用于弹窗、菜单和场景面板，不与内容卡混用 */
+  --shadow-overlay: 0 18px 48px -20px rgb(15 23 42 / 0.32), 0 8px 20px -12px rgb(15 23 42 / 0.16);
 }
 
 /* 全局滚动条样式 */
@@ -55,16 +67,24 @@
   background-color: var(--color-gray-600);
 }
 
-/* 标题栏安全区域高度 - 页面顶部 padding 需要避开此区域
+/* 页面顶部偏移：CLI Web 用作视觉留白，Electron 同时用于避开标题栏
  * macOS: 红绿灯在左侧由 Sidebar 处理，右侧内容区无遮挡，使用较小值
- * Windows/Linux: 窗口控制按钮在右上角占据 32px 高度，需要完整避开 */
+ * Windows: 跟随 Window Controls Overlay 提供的系统高度
+ * Linux: 自定义窗口控制按钮固定占据 32px 高度 */
 :root {
+  --titlebar-area-height: 1rem;
+}
+
+.platform-electron {
   --titlebar-area-height: 1rem; /* 16px - macOS */
 }
 
-.platform-windows,
+.platform-windows {
+  --titlebar-area-height: env(titlebar-area-height, 2rem);
+}
+
 .platform-linux {
-  --titlebar-area-height: 2rem; /* 32px - 匹配 titleBarOverlay height */
+  --titlebar-area-height: 2rem;
 }
 
 /* 禁用窗口拖拽区域 - 用于弹窗等需要正常交互的元素 */

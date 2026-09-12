@@ -2,41 +2,64 @@
   "title": "Settings",
   "tabs": {
     "basic": "General",
+    "navigation": "Navigation",
     "ai": "AI Settings",
-    "aiConfig": "Chat Model",
-    "aiRAG": "Vector Model",
-    "aiPrompt": "Chat Config",
-    "aiPreset": "Legacy Prompts",
+    "aiConfig": "Model Service",
+    "aiDefaultModel": "Default Model",
+    "semanticIndex": "Semantic Index",
+    "chatPreferences": "Preferences",
     "aiPreprocess": "Preprocess",
     "dataManage": "Data Management",
     "storage": "Storage",
-    "storageManage": "Storage",
-    "sessionManage": "Sessions",
+    "security": "Security",
+    "sessionManage": "Session Index",
     "about": "About",
-    "api": "API Service"
+    "api": "Automation",
+    "apiSubTabs": {
+      "autoSync": "Auto Sync",
+      "apiService": "API Service",
+      "mcp": "MCP"
+    }
   },
   "basic": {
+    "general": {
+      "title": "General"
+    },
+    "preferences": {
+      "title": "Preferences"
+    },
     "language": {
-      "title": "Language",
       "description": "Choose language"
     },
     "appearance": {
       "title": "Appearance",
       "themeMode": "Theme Mode",
+      "insightCardTheme": "Insight card colors",
+      "insightCardThemeOption": "Color scheme {index}",
       "auto": "System",
       "light": "Light",
       "dark": "Dark"
     },
     "defaultTab": {
-      "title": "Default Tab",
-      "description": "Default page when entering a session",
-      "overview": "Overview",
+      "description": "Default page when entering a chat conversation",
+      "insights": "Insights",
       "aiChat": "AI Chat"
     },
-    "screenshot": {
-      "title": "Screenshot",
-      "mobileAdapt": "Mobile Adaptation",
-      "mobileAdaptDesc": "Auto-scale width when taking screenshots for mobile viewing"
+    "autoLaunch": {
+      "openAtLogin": "Launch at Login",
+      "openAtLoginDesc": "Automatically start ChatLab when the system boots",
+      "devModeHint": "Not available in dev mode"
+    },
+    "closeBehavior": {
+      "label": "When closing the main window",
+      "background": "Run in background",
+      "quit": "Quit app"
+    },
+    "toolsPanel": {
+      "positionLabel": "Tools Panel Position",
+      "positionDesc": "Choose where the quick tools panel appears",
+      "positionSide": "Side",
+      "positionHeader": "Header"
     },
     "network": {
       "title": "Network",
@@ -58,30 +81,55 @@
       "saveFailed": "Save failed"
     }
   },
+  "navigation": {
+    "title": "Navigation Layout",
+    "description": "Choose whether analysis features appear as sidebar entries or as secondary pages under Insight. Changes apply after saving.",
+    "invalidLayout": "The saved navigation layout could not be read, so plugin defaults are in use. Saving or resetting will replace the invalid configuration.",
+    "loadFailed": "The saved navigation layout could not be loaded, so plugin defaults are shown temporarily. Reload the app to try again; saving and resetting are disabled until loading succeeds.",
+    "primary": "Primary entry",
+    "inGroup": "Secondary · {group}",
+    "group": "Secondary navigation group",
+    "hidden": "Hidden",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "locationFor": "Set navigation location for {title}",
+    "unavailable": "Plugin unavailable",
+    "emptyGroup": "This group currently has no navigation entries.",
+    "saved": "Navigation layout saved",
+    "saveFailed": "Failed to save navigation layout",
+    "reset": "Reset to defaults",
+    "resetDone": "Default navigation layout restored",
+    "resetFailed": "Failed to restore the default navigation layout",
+    "storageHint": "Desktop and CLI Web share this layout from .chatlab."
+  },
+  "defaultModel": {
+    "title": "Default Model",
+    "noConfigs": "Please add a model configuration in \"Model Service\" first",
+    "selectProvider": "Select provider",
+    "selectModel": "Select model",
+    "assistantModel": {
+      "label": "Default Assistant Model",
+      "description": "Used for AI chat, tool calls, SQL assistant, and context compression"
+    },
+    "fastModel": {
+      "label": "Fast Model",
+      "description": "Used for session summary generation. Falls back to the default assistant model if not set",
+      "followAssistant": "Follow default assistant model"
+    }
+  },
   "aiConfig": {
-    "title": "Chat Model",
-    "loading": "Loading...",
-    "inUse": "Active",
+    "title": "Model Services",
     "defaultModel": "Default Model",
-    "localService": "Local Service",
-    "customEndpoint": "Custom Endpoint",
-    "edit": "Edit",
-    "delete": "Delete",
     "empty": {
       "title": "No AI service configured",
       "description": "Add a configuration to start using AI features"
     },
-    "addConfig": "Add Configuration",
+    "addConfig": "Add New Service",
     "maxConfigs": "Maximum configurations reached (10)",
     "modal": {
-      "addConfig": "Add New Configuration",
-      "editConfig": "Edit Configuration",
-      "officialApi": "Official API",
-      "officialApiDesc": "DeepSeek, Gemini, etc.",
+      "addConfig": "Add New Service",
+      "editConfig": "Edit Service",
       "localService": "Local Service",
-      "localServiceDesc": "Ollama, etc.",
-      "openaiCompatible": "OpenAI Compatible",
-      "openaiCompatibleDesc": "Custom endpoint",
       "configName": "Configuration Name",
       "optional": " (Optional)",
       "configNamePlaceholderPreset": "Leave empty to use provider name",
@@ -94,22 +142,50 @@
       "validate": "Validate",
       "validationSuccess": "Connection validated successfully",
       "validationFailed": "Connection validation failed",
+      "validationFailedTitle": "API Connection Validation Failed",
+      "saveAnywayHint": "Validation did not pass. The configuration may be incorrect. Save anyway?",
+      "saveAnyway": "Save Anyway",
       "validationError": "Validation failed: ",
       "model": "Model",
-      "modelName": "Model Name",
-      "modelNamePlaceholder": "e.g. gpt-4, claude-3",
-      "modelNamePlaceholderLocal": "e.g. qwen3, deepseek-r1",
-      "modelNameHint": "Enter the model name supported by the API",
-      "modelNameHintLocal": "Enter the locally deployed model name",
-      "apiEndpoint": "API Endpoint",
+      "apiEndpoint": "API URL",
       "apiEndpointHint": "OpenAI-compatible API endpoint",
-      "disableThinking": "Disable Thinking Mode",
-      "disableThinkingDesc": "For models like Qwen3, DeepSeek-R1. Uses standard tool calling format when disabled.",
-      "isReasoningModel": "Reasoning Model",
-      "isReasoningModelDesc": "Extracts thinking process and disables tool calling (e.g. DeepSeek-R1, QwQ)",
-      "advancedOptions": "Advanced Options",
+      "resolvedUrl": "Resolved URL:",
+      "fetchModels": "Fetch from API",
+      "fetchModelsTitle": "Browse Remote Models",
+      "fetchModelsLoading": "Fetching model list...",
+      "fetchModelsEmpty": "No models found",
+      "fetchModelsError": "Failed to fetch models",
+      "fetchModelsCount": "{total} models total, showing {shown}",
+      "modelAdded": "Added",
+      "addAllModels": "Add all",
+      "searchModels": "Search models...",
+      "apiEndpointOverrideHint": "Default URL is prefilled. Replace if needed",
       "customService": "Custom Service",
-      "unnamedConfig": "Unnamed Configuration"
+      "visitWebsite": "Visit Website",
+      "getApiKey": "Get API Key",
+      "presetService": "Preset",
+      "thirdPartyService": "Third-party",
+      "addCustomModel": "Add Model",
+      "deleteCustomModel": "Delete Selected",
+      "customModelId": "Model Endpoint Name",
+      "customModelIdHint": "The model identifier used in API calls",
+      "customModelDisplayName": "Display Name",
+      "customModelDisplayNamePlaceholder": "Custom display name",
+      "editModel": "Edit Model",
+      "contextWindow": "Context Window",
+      "contextWindowPlaceholder": "e.g. 128000",
+      "contextWindowHint": "Maximum context tokens supported by this model (used for context compression)",
+      "contextWindowMissing": "Context window not set, will use default. Click \"Edit Model\" to set it manually",
+      "modelRequired": "Add at least one model to save",
+      "apiFormat": "API Format",
+      "apiFormatOpenAI": "OpenAI Completions",
+      "apiFormatAnthropic": "Anthropic",
+      "apiFormatGemini": "Gemini",
+      "apiFormatOpenAIResponses": "OpenAI Responses"
+    },
+    "providerKind": {
+      "aggregator": "Aggregator",
+      "custom": "Custom"
     }
   },
   "storage": {
@@ -117,33 +193,53 @@
     "description": "Manage data files stored locally by ChatLab",
     "dataLocation": {
       "title": "Data Directory",
-      "description": "Customize where local data and cache are stored",
+      "description": "Customize where chat databases and vector indexes are stored",
+      "managedDescription": "This setting only manages chat databases and vector indexes. AI chats, cache, and logs remain in the fixed system data directory.",
       "choose": "Choose",
+      "applyPath": "Apply",
       "reset": "Reset",
       "open": "Open",
-      "restartTip": "Please restart the app after switching. Data will be migrated from the old directory.",
+      "serverPathHint": "Enter an absolute path that is accessible from the machine running the CLI server.",
+      "migrateHint": "Chat database data is still at a legacy location. Migrate to the unified directory:",
+      "ignoreMigrateHint": "Ignore",
+      "migrateAction": "Migrate Now",
+      "restartTip": "Please restart the app after switching. Chat database data will be migrated based on your choice.",
+      "cliRestartTip": "Restart the CLI server after switching. Chat database data will be migrated before the server starts.",
       "confirmTitle": "Confirm Directory Change",
-      "confirmMessage": "You are about to change the data storage location. Existing data will be migrated to the new directory.",
+      "confirmMessage": "You are about to change the chat database directory. If migration is selected, existing chat database data will be copied to the new directory.",
       "newPath": "New directory path",
       "defaultPath": "Default location",
-      "confirmWarning": "After restarting, the old data directory will be automatically deleted. Please ensure the new path is correct.",
+      "confirmWarning": "After restarting, chat database data will be migrated to the new location and the old directory will be kept as a backup.",
+      "cliConfirmWarning": "After restarting the CLI server, chat database data will be migrated to the new location and the old directory will be kept as a backup. Make sure the server process has write access.",
+      "pathRequired": "Please enter a data directory path",
+      "installDirForbidden": "Data directory cannot be placed inside the app installation directory, as it will be cleared during updates",
       "cancel": "Cancel",
       "confirm": "Confirm",
-      "migrationSuccessTitle": "Migration Complete",
+      "migrationQueuedTitle": "Migration Queued",
       "migrationSuccessMessage": "The app needs to restart for changes to take effect.",
-      "relaunchNow": "Restart Now"
+      "cliMigrationSuccessMessage": "Stop the current CLI server and start it again. Migration will run before the server starts. Reopen the page afterward to see the new directory.",
+      "relaunchNow": "Restart Now",
+      "acknowledge": "Got it",
+      "cleanupNoticeTitle": "Switched to the new data directory",
+      "cleanupNoticeDescription": "To prevent data loss, the original directory is still kept as a backup. Verify that your chat history is complete before removing it from Storage Management.",
+      "cleanupOldPath": "Original data directory",
+      "cleanupLater": "Later",
+      "cleanupGoToStorage": "Open Storage Management",
+      "cleanupTitle": "Old data awaiting cleanup",
+      "cleanupDescription": "The pre-migration directory is still kept as a backup. Delete it manually only after verifying the chat history in the new directory.",
+      "cleanupDeleteAction": "Delete old data",
+      "cleanupDeleteConfirmTitle": "Permanently delete old data?",
+      "cleanupDeleteConfirmDescription": "This cannot be undone. Verify that the chat history in the new directory is complete before deleting the original directory below.",
+      "cleanupDeleteConfirmAction": "Delete permanently",
+      "cleanupDeleteFailed": "Failed to delete old data"
     },
+    "openRootDir": "Open Root",
     "totalUsage": "Total: ",
     "loading": "Loading...",
     "files": "files",
     "notExist": "Not exist",
     "clear": "Clear",
     "open": "Open",
-    "notes": {
-      "title": "Notes",
-      "logSafe": "Log files are mainly for debugging and can be safely cleared",
-      "noRecover": "All cleared files cannot be recovered, please proceed with caution"
-    },
     "cache": {
       "databases": {
         "name": "Chat Databases",
@@ -153,10 +249,6 @@
         "name": "AI Chat Databases",
         "description": "AI chat history and config files"
       },
-      "downloads": {
-        "name": "Downloads",
-        "description": "Screenshots, analysis results, etc."
-      },
       "statsCache": {
         "name": "Cache Data",
         "description": "Statistics cache for chat records, auto-rebuilt after clearing"
@@ -165,50 +257,143 @@
         "name": "Log Files",
         "description": "App logs including import, AI, error logs"
       }
-    },
+    }
+  },
+  "ai": {
     "session": {
       "title": "Session Index Settings",
       "description": "Session index splits chat history into conversation segments by time gaps for better AI analysis",
       "defaultThreshold": "Default Gap Threshold",
       "thresholdUnit": "minutes",
       "thresholdHelp": "Messages exceeding this time gap will be split into a new session",
-      "notGenerated": "Session index not generated",
-      "generateHint": "Generate index to help AI better understand conversation context",
-      "generate": "Generate Index",
-      "regenerate": "Regenerate",
       "generating": "Generating",
-      "sessionCount": "{count} sessions",
-      "generated": "Session index generated",
-      "generateSuccess": "Session index generated successfully, {count} sessions created",
-      "generateError": "Generation failed",
       "batchTitle": "Batch Generate Index",
       "totalSessions": "{count} chats total",
       "generatedCount": "{count} generated",
       "notGeneratedCount": "{count} not generated",
       "loadingStatus": "Loading...",
       "batchGenerate": "Generate Missing",
-      "batchRegenerate": "Regenerate All"
+      "batchRegenerate": "Regenerate All",
+      "batchRegenerateConfirmTitle": "Confirm Regeneration",
+      "batchRegenerateConfirmMessage": "This will clear all existing AI summaries and regenerate session indexes from scratch.",
+      "batchRegenerateConfirmWarning": "Existing summaries will be overwritten. This action cannot be undone.",
+      "summaryStrategy": "Summary Detail Level",
+      "summaryStrategyHelp": "Controls how detailed AI-generated summaries will be",
+      "summaryBrief": "Brief",
+      "summaryStandard": "Standard"
+    },
+    "semanticIndex": {
+      "title": "Semantic Index",
+      "description": "Builds an index of your chats with the selected vector model. Once enabled, the AI can semantically retrieve relevant past excerpts as supporting evidence.",
+      "vectorModel": "Vector Model",
+      "selectModel": "Select Vector Model",
+      "switchModel": "Switch Model",
+      "noModelSelected": "No vector model selected",
+      "modelModalTitle": "Configure Vector Model",
+      "modeLocal": "Local Model",
+      "modeApi": "API",
+      "recommended": "Recommended",
+      "approxSize": "~{mb} MB",
+      "modelDownloadSource": "Model Download Source",
+      "downloadSourceOfficial": "Hugging Face Official",
+      "downloadSourceMirror": "HF-Mirror (China)",
+      "mirrorSourceHint": "HF-Mirror is a third-party public mirror for networks in mainland China. Model files will be downloaded from hf-mirror.com.",
+      "localDownloadHint": "The model downloads automatically after saving. The first download may take a while.",
+      "localRuntimeDownloadHint": "The CLI Web local-model runtime is about 370 MB. If it is not preinstalled, ChatLab installs it automatically on first use. The selected model downloads after saving.",
+      "apiTemplate": "Service Template",
+      "modelName": "Model Name",
+      "apiKeySaved": "Saved; leave blank to keep",
+      "apiKeyHint": "API keys are stored separately and securely; the config keeps only a reference.",
+      "apiCostWarning": "API mode may incur provider costs. Please confirm model pricing.",
+      "changeRebuildHint": "After changing the model or API, enabled conversations need to be rebuilt.",
+      "modelDownloading": "Downloading model, this may take a few minutes on first use…",
+      "runtimeInstalling": "Installing the local-model runtime. First use may take a while…",
+      "modelError": "Local model preparation failed. It will be retried when building the index.",
+      "searchMaxResults": {
+        "label": "Excerpts per search",
+        "hint": "Default number of relevant excerpts returned when the AI runs a semantic search (5-15). The AI may raise it as needed."
+      },
+      "overview": "Index Overview",
+      "enabledCount": "{count} conversations enabled",
+      "coverage": "Coverage {percent}%",
+      "buildPending": "Build Pending Indexes",
+      "cleanup": "Clean Up Unused Indexes",
+      "cleanupConfirm": "This deletes index data from disabled conversations and old models. It does not delete chat records.",
+      "configFirst": "Configure a vector model first",
+      "selectConversations": "Select Conversations",
+      "enabledSessions": "Enabled Conversations",
+      "state": {
+        "completed": "Completed",
+        "building": "Building",
+        "pending": "Pending",
+        "needsRebuild": "Needs Rebuild",
+        "failed": "Failed",
+        "paused": "Paused"
+      },
+      "action": {
+        "build": "Build Index",
+        "pause": "Pause",
+        "cancel": "Cancel",
+        "rebuild": "Rebuild",
+        "remove": "Remove"
+      },
+      "session": {
+        "statusLabel": "Status",
+        "notEnabled": "Not enabled",
+        "coverageLabel": "Coverage",
+        "progressLabel": "Build progress",
+        "enableHint": "Once enabled, the AI can retrieve past chat excerpts when answering questions about this conversation.",
+        "configFirst": "Configure a vector model under Settings > AI > Semantic Index before enabling.",
+        "enable": "Enable Index",
+        "buildVsEnable": "Enable Index: include this conversation in semantic retrieval. Build Index: read all messages and generate vectors, which may use local compute or API quota.",
+        "retry": "Retry",
+        "continue": "Continue"
+      },
+      "picker": {
+        "title": "Select Conversations",
+        "all": "All",
+        "group": "Group",
+        "private": "Private",
+        "searchPlaceholder": "Search by name",
+        "messages": "{count} messages",
+        "enabled": "Enabled",
+        "selectedSummary": "{count} conversations selected, ~{messages} messages",
+        "confirmRemoveTitle": "Confirm Remove",
+        "confirmRemoveMessage": "The semantic index for these conversations will be permanently deleted."
+      }
     }
   },
   "aiPrompt": {
     "chatSettings": {
-      "title": "Chat Settings"
+      "title": "Tool Settings"
     },
     "exportSettings": {
       "title": "Export Settings"
     },
-    "skillSettings": {
-      "title": "Skill Settings",
+    "chatPreferences": {
+      "title": "Conversation Preferences",
       "enableAutoSkill": "AI Auto-Select Skills",
-      "enableAutoSkillDesc": "When enabled, AI will automatically match and activate suitable analysis skills based on user queries; when disabled, skills only take effect when manually selected"
+      "enableAutoSkillDesc": "When enabled, AI will automatically match and activate suitable analysis skills based on user queries; when disabled, skills only take effect when manually selected",
+      "chartAutoMode": {
+        "title": "Auto Chart Generation",
+        "description": "Controls how actively AI uses charts when the Chart Assistant is not manually selected",
+        "explicit": "Explicit requests",
+        "explicitHint": "AI only generates charts when you explicitly ask for them.",
+        "suggest": "Smart generation",
+        "suggestHint": "Conservative strategy: AI only generates charts when they clearly help explain the analysis.",
+        "aggressive": "Active generation",
+        "aggressiveHint": "AI more actively adds charts in data analysis scenarios."
+      }
     },
     "maxMessages": {
       "title": "Max Messages per Request",
       "description": "Max number of messages sent to AI per request. Higher values consume more tokens but provide more accurate context (recommended: 2000)."
     },
-    "maxHistory": {
-      "title": "Context Limit",
-      "description": "Number of recent conversation rounds to keep (1 round = User + AI). Prevents excessive token usage."
+    "searchContext": {
+      "title": "Search Context Window",
+      "description": "Automatically include surrounding messages for each search hit to help AI understand the context. Set to 0 to disable",
+      "before": "Before",
+      "after": "After"
     },
     "exportFormat": {
       "title": "Export Format",
@@ -218,77 +403,6 @@
     "sqlExportFormat": {
       "title": "SQL Lab Export Format",
       "description": "File format for exporting SQL query results"
-    },
-    "presets": {
-      "title": "System Prompts",
-      "add": "Add Preset",
-      "import": "Import Presets",
-      "description": "Prompts are used for both group and private chat analysis, system adjusts content based on analysis type"
-    },
-    "preset": {
-      "builtIn": "Built-in",
-      "groupOnly": "Group Only",
-      "privateOnly": "Private Only",
-      "view": "View",
-      "edit": "Edit",
-      "copy": "Copy",
-      "delete": "Delete"
-    },
-    "modal": {
-      "editBuiltin": "Edit System Prompt",
-      "editCustom": "Edit Custom Prompt",
-      "addCustom": "Add Custom Prompt",
-      "presetName": "Preset Name",
-      "presetNamePlaceholder": "Give your preset a name",
-      "applicableTo": "Applicable To",
-      "applicableToHint": " (Check to enable for corresponding analysis type)",
-      "groupChat": "Group Chat",
-      "privateChat": "Private Chat",
-      "systemPrompt": "System Prompt",
-      "systemPromptPlaceholder": "Define the AI assistant's role, tasks and response requirements...",
-      "preview": "Full Prompt Preview",
-      "previewHint": " (Preview shows group chat mode, actual will adjust based on analysis type)",
-      "resetToDefault": "Reset to Default",
-      "saveChanges": "Save Changes",
-      "addPreset": "Add Preset"
-    },
-    "importPreset": {
-      "title": "Import Presets",
-      "description": "Get recommended system prompt presets from remote",
-      "loading": "Loading remote presets...",
-      "loadError": "Failed to load remote presets",
-      "noPresets": "No remote presets available",
-      "commonPresets": "Universal Presets",
-      "groupPresets": "Group Chat Only",
-      "privatePresets": "Private Chat Only",
-      "add": "Add",
-      "added": "Added",
-      "preview": "Preview",
-      "systemPrompt": "System Prompt",
-      "noDescription": "No description",
-      "fetchingContent": "Loading content...",
-      "fetchError": "Failed to load content"
-    },
-    "legacyPrompt": {
-      "title": "Legacy Prompts",
-      "description": "The old prompt system no longer affects AI conversations. This section is kept only for viewing and copying legacy configs during the transition.",
-      "copyJson": "Copy JSON",
-      "emptyTitle": "No legacy prompt data found",
-      "emptyDescription": "There is no legacy prompt config available to view on this device.",
-      "activePreset": "Previously Active Preset",
-      "notConfigured": "Not recorded",
-      "customPresetCount": "Custom Presets",
-      "remotePresetCount": "Imported Remote Presets",
-      "parseError": "Failed to parse legacy prompt data, but you can still copy the raw JSON first.",
-      "customPresetList": "Custom Presets",
-      "noPromptContent": "No prompt content recorded",
-      "rawJsonTitle": "Raw Config JSON",
-      "rawJsonHint": "View and copy only",
-      "copySuccess": "JSON copied to clipboard",
-      "copyFailed": "Copy failed",
-      "groupOnly": "Group Only",
-      "privateOnly": "Private Only",
-      "common": "Common"
     }
   },
   "about": {
@@ -297,52 +411,21 @@
     "version": "Version",
     "checkUpdate": "Check for Updates",
     "checking": "Checking...",
+    "upToDate": "You are up to date",
+    "newVersionAvailable": "New version {version} available",
+    "webUpdateHint": "Run clb update in your terminal, then restart the service.",
+    "updateCheckFailed": "Update check failed: {error}",
     "unknown": "Unknown",
     "privacy": {
       "title": "Privacy Settings",
       "analytics": "Anonymous Usage Statistics",
-      "analyticsDesc": "When enabled, the app collects non-sensitive data like version number and OS version to help improve the product"
+      "analyticsDesc": "When enabled, the app sends an anonymous installation ID, version, system, app type, language, approximate region, imported chat platform, and major feature usage. It never sends chat content, contacts, filenames, paths, model names, or keys"
     },
     "developer": {
       "title": "Developer Options",
       "debugMode": "DEBUG Mode",
-      "debugModeDesc": "When enabled, AI logs will include full raw message content without truncation. Log files may grow significantly"
+      "debugModeDesc": "When enabled, the debug panel and quick debugging tools will be shown. You can use them to view databases, run testing tools, and record more detailed debug logs."
     }
-  },
-  "embedding": {
-    "title": "Vector Model",
-    "description": "Uses embedding vectors to understand question meaning, enables AI to perform semantic search",
-    "configList": "Embedding Configs",
-    "addConfig": "Add Config",
-    "editConfig": "Edit Config",
-    "noConfigs": "No configs yet, click the button above to add",
-    "active": "Active",
-    "setActive": "Set Active",
-    "deleteConfirm": "Delete config \"{name}\"?",
-    "configName": "Config Name",
-    "configNamePlaceholder": "e.g. Ollama Embedding",
-    "apiSource": "API Source",
-    "apiSourceHint": "\"Reuse Chat Model\" will use the endpoint and key from the active chat model",
-    "reuseLLM": "Reuse Chat Model",
-    "customAPI": "Custom API",
-    "model": "Model Name",
-    "modelPlaceholder": "e.g. nomic-embed-text",
-    "modelHint": "Ollama common: nomic-embed-text, mxbai-embed-large",
-    "baseUrl": "API Endpoint",
-    "baseUrlPlaceholder": "e.g. http://localhost:11434/v1",
-    "apiKey": "API Key",
-    "apiKeyPlaceholder": "Enter API Key",
-    "optional": "(Optional)",
-    "validate": "Test Connection",
-    "validateSuccess": "Connection successful!",
-    "validateFailed": "Connection failed",
-    "saveFailed": "Save failed",
-    "vectorStore": "Vector Cache",
-    "vectorStoreDesc": "Cache computed vectors to avoid recalculation and improve speed",
-    "cached": "Cached",
-    "size": "Size",
-    "clear": "Clear",
-    "clearVectorStoreConfirm": "Clear all vector cache? This will cause recalculation on next search."
   },
   "aiPreprocess": {
     "title": "Chat Preprocessing",
@@ -356,9 +439,8 @@
     "denoiseDesc": "Filter out meaningless messages like interjections, emojis, and system placeholders (e.g. [Image])",
     "desensitize": "Data Masking",
     "desensitizeDesc": "Replace sensitive information (phone numbers, emails, ID numbers, etc.) based on rules",
-    "desensitizeRules": "Masking Rules",
-    "desensitizeRulesDesc": "Check the rules to enable. Rules are matched in list order",
     "desensitizeBuiltin": "Built-in Rules",
+    "desensitizeResetBuiltin": "Restore Defaults",
     "desensitizeCustom": "Custom Rules",
     "desensitizeAddCustom": "Add Custom Rule",
     "desensitizeRuleName": "Rule Name",
@@ -377,6 +459,24 @@
     "blacklistAdd": "Add"
   },
   "desensitize": {
+    "groups": {
+      "credentials": "Passwords & Tokens",
+      "credentials_desc": "Credentials such as API keys and Bearer tokens",
+      "global_contact": "Global Contact Info",
+      "global_contact_desc": "Cross-region contact details such as email addresses",
+      "global_financial": "Global Financial Info",
+      "global_financial_desc": "Financial identifiers such as credit card numbers",
+      "global_network": "Global Network Info",
+      "global_network_desc": "Network identifiers such as URLs and IP addresses",
+      "region_cn": "Mainland China",
+      "region_cn_desc": "Rules for phone numbers, IDs, and bank cards in Mainland China",
+      "region_us": "United States",
+      "region_us_desc": "Rules for phone numbers and IDs in the United States",
+      "region_jp": "Japan",
+      "region_jp_desc": "Rules for phone numbers and My Number in Japan",
+      "region_kr": "Korea",
+      "region_kr_desc": "Rules for phone numbers and resident registration numbers in Korea"
+    },
     "rules": {
       "cn_phone": "China Mobile Number",
       "cn_phone_desc": "11-digit starting with 1xx",
@@ -415,11 +515,11 @@
     }
   },
   "api": {
-    "betaWarning": "The current API version is in Beta, and endpoints may change at any time.",
     "service": {
       "title": "API Service",
       "enable": "Enable API Service",
       "enableDesc": "When enabled, external tools can query, export, and import chat data via HTTP API. Localhost only (127.0.0.1)",
+      "socket": "Unix Socket",
       "portInUseHint": "Port is in use. Please change the port below or close the program using this port"
     },
     "status": {
@@ -448,28 +548,132 @@
       "title": "Data Sources",
       "desc": "Configure external data source URLs. ChatLab will automatically pull and import chat data at the specified interval.",
       "empty": "No data sources",
+      "noSessions": "No import sessions. Click \"Manage Sessions\" above to add.",
       "disabled": "Paused",
       "every": "Every",
       "minutes": "min",
       "lastSync": "Last sync",
+      "syncing": "Syncing",
+      "messages": "messages",
       "addBtn": "Add Data Source",
       "form": {
         "modalTitle": "Add Data Source",
         "name": "Name",
         "namePlaceholder": "e.g., My Chat Server",
-        "url": "Data Source URL",
-        "token": "Access Token (optional)",
+        "token": "Access Token",
         "tokenPlaceholder": "Bearer Token for the remote API",
         "interval": "Pull Interval (minutes)",
-        "targetSession": "Target Session ID (optional)",
-        "targetSessionPlaceholder": "Leave empty to create new session each time",
-        "add": "Add"
+        "pullLimit": "Messages per Pull",
+        "pullLimitPlaceholder": "Default 1000"
+      },
+      "discovery": {
+        "baseUrl": "Server URL",
+        "baseUrlPlaceholder": "e.g. http://127.0.0.1:2333/api/v1",
+        "found": "Found {count} sessions",
+        "search": "Search",
+        "searchPlaceholder": "Search by session name",
+        "selectAll": "Select All",
+        "deselectAll": "Deselect All",
+        "selectByType": "Session type",
+        "typeAll": "All",
+        "typePrivate": "Private",
+        "typeGroup": "Group",
+        "loadMore": "Load More",
+        "subscribe": "Subscribe {count} sessions",
+        "messages": "messages",
+        "error": "Failed to connect to remote server",
+        "connectionCheckFailed": "Cannot connect to the remote server. Please check the URL and token."
+      },
+      "edit": {
+        "title": "Edit Data Source",
+        "save": "Save",
+        "cancel": "Cancel",
+        "editSource": "Edit Config",
+        "manageSessions": "Manage Subscriptions",
+        "subscribed": "Subscribed"
+      },
+      "deleteConfirm": {
+        "title": "Delete Data Source",
+        "message": "Are you sure you want to delete \"{name}\"? All import configurations under this data source will be removed. Already imported local conversations will not be deleted."
+      },
+      "deleteSessionConfirm": {
+        "title": "Delete Subscription",
+        "message": "Are you sure you want to delete \"{name}\"?",
+        "keepData": "Remove subscription only",
+        "deleteData": "Also delete imported chats"
       }
     },
     "usage": {
       "title": "Usage Guide",
-      "desc": "After enabling the service, use the following endpoints to query data. All requests require Bearer Token authentication.",
-      "authHint": "Header example:"
+      "desc": "After enabling the service, external tools can query data or push chat records to ChatLab via API. All requests require Bearer Token authentication.",
+      "authHint": "Header example:",
+      "docLink": "View full API documentation"
+    }
+  },
+  "mcp": {
+    "overview": {
+      "title": "MCP Overview",
+      "description": "MCP lets AI assistants directly query your chat records. Supports session discovery, keyword search, member stats, time distribution, and more.",
+      "toolCount": "{count} tools",
+      "resourceCount": "{count} resources",
+      "installHint": "Install chatlab-cli, then add the config below to your AI client:"
+    },
+    "clients": {
+      "other": "Other"
+    },
+    "config": {
+      "title": "Client Configuration",
+      "clientLabel": "MCP Client",
+      "copy": "Copy",
+      "copied": "Copied",
+      "claudeHint": "Add this config to ClaudeCode's MCP configuration.",
+      "codexHint": "Add this TOML config to your ~/.codex/config.toml file.",
+      "openclawHint": "Add this config to your project's openclaw.json file.",
+      "otherHint": "Add this JSON config to your MCP client configuration file."
+    },
+    "tips": {
+      "title": "Tips",
+      "dataDir": "The MCP server reads chat data from ~/.chatlab/, sharing the same data as the desktop app.",
+      "readOnly": "All operations are read-only and will not modify your chat records.",
+      "nodeRequired": "npx and CLI modes require Node.js 22.19 or later.",
+      "docs": "For detailed documentation, visit docs.chatlab.fun."
+    }
+  },
+  "security": {
+    "lock": {
+      "title": "App Lock",
+      "desc": "Protect ChatLab with a 4-digit PIN",
+      "statusOn": "Enabled",
+      "statusOff": "Disabled",
+      "disableBtn": "Disable App Lock",
+      "disableConfirm": "Disable app lock? Your current PIN will be deleted.",
+      "manualLock": "Lock Now"
+    },
+    "password": {
+      "titleSetup": "Set PIN & Enable App Lock",
+      "titleChange": "Change PIN",
+      "labelOld": "Current PIN",
+      "labelNew": "New PIN",
+      "labelConfirm": "Confirm New PIN",
+      "btnEnable": "Enable",
+      "errorInvalidPin": "PIN must be exactly 4 digits",
+      "errorMismatch": "PINs do not match",
+      "errorSameAsOld": "New PIN must differ from current PIN",
+      "errorFailed": "Operation failed, please try again"
+    },
+    "autoLock": {
+      "title": "Auto Lock",
+      "idleLabel": "Auto lock after idle timeout",
+      "startupLabel": "Require unlock on startup"
+    },
+    "lockScreen": {
+      "titleLocked": "ChatLab is Locked",
+      "placeholderPassword": "Enter 4-digit PIN",
+      "btnUnlock": "Unlock",
+      "verifying": "Verifying...",
+      "errorService": "Unlock failed, please try again",
+      "errorWrongPassword": "Incorrect PIN",
+      "errorTooManyAttempts": "Too many attempts. Try again in {seconds} seconds"
     }
   }
 }

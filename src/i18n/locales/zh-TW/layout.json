@@ -1,16 +1,18 @@
 {
   "brand": "ChatLab",
-  "newAnalysis": "分析新聊天",
-  "tools": "實用工具",
-  "chatHistory": "聊天紀錄",
+  "newAnalysis": "分析新對話",
+  "relationships": "關係",
+  "insight": "足跡",
   "manage": "管理",
   "noRecords": "暫無紀錄",
+  "sessionLoadFailed": "載入聊天紀錄失敗",
   "searchPlaceholder": "搜尋聊天名稱",
   "noSearchResult": "未找到匹配的聊天紀錄",
   "contextMenu": {
     "rename": "重新命名",
     "pin": "置頂",
     "unpin": "取消置頂",
+    "copyId": "複製 ID",
     "delete": "刪除"
   },
   "renameModal": {
@@ -21,15 +23,31 @@
     "title": "確認刪除",
     "message": "確定要刪除聊天紀錄「{name}」嗎？此操作無法復原。"
   },
-  "tooltip": {
-    "expand": "展開側邊欄",
-    "collapse": "收起側邊欄",
-    "hint": "右鍵可刪除或重新命名聊天紀錄",
-    "search": "搜尋聊天紀錄"
+  "updateNotice": {
+    "tag": "New",
+    "title": "發現新版本",
+    "message": "最新版本是 v{version}。",
+    "desktopHint": "點擊立即更新後，ChatLab 會開始檢查並下載桌面端更新。",
+    "cliHint": "請在終端機執行以下命令更新 CLI，更新後重新啟動服務。",
+    "updateNow": "立即更新",
+    "later": "稍後"
   },
-  "sessionInfo": "{count} 條訊息 · {time}",
+  "filter": {
+    "all": "全部",
+    "private": "私聊",
+    "group": "群聊"
+  },
+  "sort": {
+    "importedAt": "匯入時間",
+    "lastMessageTs": "最近對話",
+    "messageCount": "訊息數量"
+  },
+  "tooltip": {
+    "search": "搜尋聊天紀錄",
+    "sort": "排序"
+  },
+  "sessionInfo": "{count} 條訊息",
   "footer": {
-    "helpAndFeedback": "回饋與協助",
     "settings": "設定"
   }
 }

@@ -7,15 +7,36 @@ import 'dayjs/locale/en'
 import 'dayjs/locale/ja'
 import { type LocaleType, setLocale as setI18nLocale, getLocale, getDayjsLocale } from '@/i18n'
 import type { PreprocessConfig } from '@electron/preload/index'
+import type { AIPreprocessConfig } from '@openchatlab/shared-types'
+import { useAIService, usePlatformService } from '@/services'
+import { PLATFORM_CAPABILITIES } from '@/utils/platform-capabilities'
+import { DEFAULT_INSIGHT_CARD_THEME, type InsightCardThemeId } from '@/utils/insight-card-theme'
 
-const LOCALE_SET_KEY = 'chatlab_locale_set_by_user'
+const DESENSITIZE_RULES_SCHEMA_VERSION = 2
+
+function serializeAiPreprocessConfig(config: PreprocessConfig): AIPreprocessConfig {
+  return {
+    ...config,
+    desensitizeRulesSchemaVersion: DESENSITIZE_RULES_SCHEMA_VERSION,
+    desensitizeBuiltinRuleOverrides: { ...(config.desensitizeBuiltinRuleOverrides ?? {}) },
+    mergeWindowSeconds: config.mergeWindowSeconds ?? 180,
+    desensitizeRules: config.desensitizeRules
+      .filter((rule) => !rule.builtin)
+      .map((rule) => ({
+        ...rule,
+        locales: [...rule.locales],
+      })),
+  }
+}
 
 export const useSettingsStore = defineStore(
   'settings',
   () => {
     const locale = ref<LocaleType>(getLocale())
 
-    const defaultSessionTab = ref<'overview' | 'ai-chat'>('overview')
+    const defaultSessionTab = ref<'insights' | 'ai-chat'>('insights')
+
+    const insightCardTheme = ref<InsightCardThemeId>(DEFAULT_INSIGHT_CARD_THEME)
 
     const debugMode = ref(false)
 
@@ -26,11 +47,13 @@ export const useSettingsStore = defineStore(
 
     const aiPreprocessConfig = ref<PreprocessConfig>({
       dataCleaning: true,
-      mergeConsecutive: false,
+      mergeConsecutive: true,
       mergeWindowSeconds: 180,
       blacklistKeywords: [],
-      denoise: false,
-      desensitize: false,
+      denoise: true,
+      desensitize: true,
+      desensitizeRulesSchemaVersion: DESENSITIZE_RULES_SCHEMA_VERSION,
+      desensitizeBuiltinRuleOverrides: {},
       desensitizeRules: [],
       anonymizeNames: false,
     })
@@ -39,9 +62,12 @@ export const useSettingsStore = defineStore(
      * 确保脱敏规则已初始化（首次使用或升级时通过 IPC 从主进程获取）
      */
     async function ensureDesensitizeRules() {
-      if (aiPreprocessConfig.value.desensitizeRules.length === 0) {
-        aiPreprocessConfig.value.desensitizeRules = await window.aiApi.getDefaultDesensitizeRules(locale.value)
-      }
+      const plainRules = JSON.parse(JSON.stringify(aiPreprocessConfig.value.desensitizeRules))
+      aiPreprocessConfig.value.desensitizeRules = await useAIService().mergeDesensitizeRules(
+        plainRules,
+        locale.value,
+        aiPreprocessConfig.value.desensitizeBuiltinRuleOverrides ?? {}
+      )
     }
 
     /**
@@ -50,17 +76,21 @@ export const useSettingsStore = defineStore(
     async function setLocale(newLocale: LocaleType) {
       locale.value = newLocale
 
-      localStorage.setItem(LOCALE_SET_KEY, 'true')
-
       setI18nLocale(newLocale)
 
       dayjs.locale(getDayjsLocale(newLocale))
 
       window.electron?.ipcRenderer.send('locale:change', newLocale)
 
-      // Vue 响应式 Proxy 无法通过 Electron IPC structured clone，需转为普通对象
-      const plainRules = JSON.parse(JSON.stringify(aiPreprocessConfig.value.desensitizeRules))
-      aiPreprocessConfig.value.desensitizeRules = await window.aiApi.mergeDesensitizeRules(plainRules, newLocale)
+      if (PLATFORM_CAPABILITIES.initializesLlm) await ensureDesensitizeRules()
+
+      try {
+        void usePlatformService()
+          .trackDailyActive(newLocale)
+          .catch(() => {})
+      } catch {
+        // Analytics is best-effort and can be unavailable during early startup or in tests.
+      }
     }
 
     /**
@@ -70,17 +100,10 @@ export const useSettingsStore = defineStore(
     async function initLocale() {
       const i18nLocale = getLocale()
       if (locale.value !== i18nLocale) {
-        const hasUserSetLocale = localStorage.getItem(LOCALE_SET_KEY)
-        if (!hasUserSetLocale) {
-          locale.value = i18nLocale
-        } else {
-          setI18nLocale(locale.value)
-        }
+        setI18nLocale(locale.value)
       }
 
       dayjs.locale(getDayjsLocale(locale.value))
-
-      await ensureDesensitizeRules()
 
       window.electron?.ipcRenderer.send('app:setDebugMode', debugMode.value)
     }
@@ -90,6 +113,7 @@ export const useSettingsStore = defineStore(
       setLocale,
       initLocale,
       defaultSessionTab,
+      insightCardTheme,
       debugMode,
       setDebugMode,
       aiPreprocessConfig,
@@ -97,6 +121,15 @@ export const useSettingsStore = defineStore(
     }
   },
   {
-    persist: true,
+    persist: {
+      pick: ['debugMode', 'insightCardTheme'],
+      storage: localStorage,
+    },
+    backendPersist: {
+      pick: ['aiPreprocessConfig'],
+      serialize: (state) => ({
+        aiPreprocessConfig: serializeAiPreprocessConfig(state.aiPreprocessConfig as PreprocessConfig),
+      }),
+    },
   }
 )

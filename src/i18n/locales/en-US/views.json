@@ -1,6 +1,5 @@
 {
   "cluster": {
-    "title": "Interaction Frequency",
     "rankingView": "Ranking",
     "memberView": "Member View",
     "matrixView": "Matrix View",
@@ -43,10 +42,74 @@
     "lengthGroupedTitle": "Length Range Distribution",
     "lengthGroupedHint": "Grouped by 5",
     "noTextMessages": "No text messages",
-    "noData": "No data"
+    "noData": "No data",
+    "profile": {
+      "avgLengthUnit": "{count} chars/msg",
+      "textExpression": "Text Expression",
+      "textExpressionDesc": "Longest message {count} chars",
+      "mediaRichness": "Media Richness",
+      "shortMaster": "Short Msg Master",
+      "shortMasterDesc": "{count} msgs with ≤5 chars",
+      "essayLover": "Essay Lover",
+      "essayLoverDesc": "Messages with ≥{threshold} chars",
+      "typeDistribution": "Msg Types",
+      "heroLine1Prefix": "A total of",
+      "heroLine1Suffix": "messages exchanged"
+    },
+    "typeCard": {
+      "watermark": "Type Report",
+      "nonTextPrefix": "Besides text,",
+      "nonTextImage": "images",
+      "nonTextEmoji": "emojis",
+      "nonTextVoice": "voice msgs",
+      "nonTextVideo": "videos",
+      "nonTextFile": "files",
+      "nonTextLink": "links",
+      "unitImage": "images",
+      "unitEmoji": "emojis",
+      "unitVoice": "voice msgs",
+      "unitVideo": "videos",
+      "unitFile": "files",
+      "unitLink": "links"
+    },
+    "timeCard": {
+      "hourlyDistribution": "24h Distribution",
+      "watermark": "Time Report",
+      "heroDaysIn": "days,",
+      "heroDaysActive": "days active",
+      "heroAvgPrefix": "Average",
+      "heroAvgSuffix": "messages/day",
+      "personalityNightOwl": "Night Owl",
+      "personalityEarlyBird": "Early Bird",
+      "personalityLunchChat": "Lunch Chatter",
+      "personalityEveningChat": "Evening Talker",
+      "personalityDaytime": "Daytime Active",
+      "personalityEveryday": "Always On",
+      "personalityWeekend": "Weekend Active",
+      "personalityWeekday": "Weekday Active",
+      "peakRecord": "Peak Record",
+      "peakRecordDesc": "Max {count} msgs in a day",
+      "topHoursLabel": "Top Active Hours",
+      "peakWeekdayLabel": "Peak Weekday",
+      "weekendRatio": "Weekend Ratio",
+      "weekendRatioDesc": "Messages on weekends"
+    },
+    "timeAnalysis": {
+      "memberTrendTitle": "Message Trend",
+      "memberTrendHint": "Monthly message volume by member"
+    },
+    "typeAnalysis": {
+      "textDepthTitle": "Text Depth Analysis",
+      "textTotal": "Text Messages",
+      "avgLength": "Avg Chars",
+      "medianLength": "Median Length",
+      "maxLength": "Max Length",
+      "percentiles": "Length Percentiles",
+      "shortMessages": "Short(≤5 chars)",
+      "essayMessages": "Long(≥30 chars)"
+    }
   },
   "interaction": {
-    "mentionGraph": "Mention Interaction Graph",
     "layout": "Layout",
     "circular": "Circular",
     "force": "Force",
@@ -54,6 +117,150 @@
     "reset": "Reset",
     "graphHint": "{nodes} members, {links} interactions",
     "noInteraction": "No mention interaction data"
+  },
+  "groupRelationshipGalaxy": {
+    "canvasLabel": "Group interaction relationship galaxy",
+    "loading": "Mapping group relationships...",
+    "loadFailed": "Failed to load the relationship galaxy",
+    "webglUnavailable": "The relationship galaxy is unavailable",
+    "webglUnavailableDescription": "Enable hardware acceleration or try an environment that supports WebGL.",
+    "emptyTitle": "Not enough interaction data",
+    "emptyDescription": "At least two members need replies, mentions, or nearby messages in this time range.",
+    "resetView": "Reset view",
+    "closeDetail": "Close member details",
+    "messageCount": "Group messages",
+    "relationshipScore": "Relationship strength",
+    "lastInteraction": "Last interaction",
+    "signalComposition": "Interaction signals",
+    "replies": "Replies",
+    "mentions": "Mentions",
+    "proximity": "Proximity",
+    "strongConnections": "Closest connections",
+    "connectionSignals": "{replies} replies · {mentions} mentions · {proximity} nearby",
+    "noConnections": "No direct connections to display"
+  },
+  "relationship": {
+    "empty": {
+      "title": "No Relationship Data",
+      "description": "No sessions found in the selected time range."
+    },
+    "trend": {
+      "title": "Initiative Trend",
+      "hint": "Blue line shows {name}'s monthly initiative ratio; 50% line is the balanced baseline"
+    },
+    "hero": {
+      "totalSessionsPrefix": "You had",
+      "totalSessionsSuffix": "conversations in total",
+      "initiativePrefix": "",
+      "initiativeByPrefix": "of opening messages were started by",
+      "initiativeBySuffix": "",
+      "initiateTimes": "starts"
+    },
+    "closerTitle": "Conversation Closer",
+    "closerHint": "Shows who sends the last message when a topic ends.",
+    "watermarkReport": "Relationship Report",
+    "monthFormat": "{month}/{year}",
+    "monthShortFormat": "{month}",
+    "iceBreaker": {
+      "title": "Ice Breaker",
+      "hint": "Times breaking silence after 24+ hours of inactivity"
+    },
+    "responseLatency": {
+      "title": "Reply Speed",
+      "hint": "Average time to reply after the other person sends a message",
+      "seconds": "{n}s",
+      "minutesSeconds": "{m}m {s}s",
+      "hours": "{n}h",
+      "hoursMinutes": "{h}h {m}min"
+    },
+    "perseverance": {
+      "title": "Perseverance",
+      "hintWithThreshold": "Times sending another message when the other person hasn't replied within {threshold}",
+      "thresholdMinutes": "{n} min"
+    },
+    "trajectory": {
+      "title": "Interaction Timeline",
+      "description": "See how your interactions changed month by month",
+      "metrics": {
+        "activity": "Conversation Frequency",
+        "response": "Reply Speed",
+        "perseverance": "Follow-up Messages"
+      },
+      "conversations": "Conversations",
+      "iceBreaks": "Restarts",
+      "keyMoments": "Key Months",
+      "activityPeak": "Busiest Month",
+      "activityPeakDetail": "{count} conversations",
+      "iceBreakPeak": "Most Restarts",
+      "iceBreakPeakDetail": "{count} conversation restarts",
+      "fastestResponse": "Fastest Replies",
+      "fastestResponseDetail": "{duration} average reply",
+      "showAll": "View All Months",
+      "hideAll": "Hide Monthly Data",
+      "month": "Month"
+    }
+  },
+  "journey": {
+    "loadError": "Unable to load the chat journey",
+    "empty": "There are not enough messages to build a journey yet",
+    "hero": {
+      "prefix": "Your chat history spans",
+      "summary": "Messages were exchanged across {activeMonths} months and {activeDays} active days.",
+      "filteredSummary": "Within this range, messages were exchanged across {activeMonths} months and {activeDays} active days.",
+      "footprint": "Conversation footprint",
+      "monthCount": "{count} months in view",
+      "monthTooltip": "{month} · {count} messages"
+    },
+    "metrics": {
+      "peakMonth": "Busiest month",
+      "activeMonths": "Active months",
+      "longestConversation": "Longest conversation",
+      "longestSilence": "Longest silence",
+      "messagesAndDays": "{messages} messages · {days} active days",
+      "monthsRatio": "{active} / {total} months",
+      "activeDays": "{count} active days in total",
+      "conversationDetail": "{date} · {count} messages",
+      "reopenedBy": "{name} spoke first afterward",
+      "reopened": "The conversation started again afterward",
+      "noIndex": "Conversation index unavailable",
+      "noSilence": "No silence longer than 24 hours"
+    },
+    "years": {
+      "title": "Year by year",
+      "description": "Turn through the chapters left by each year of conversation",
+      "summary": "{messages} messages · {days} active days · {months} active months",
+      "quiet": "No messages were left this year",
+      "peak": "Peak month · {count} messages"
+    },
+    "milestones": {
+      "title": "Key milestones",
+      "description": "Follow the moments that shaped this conversation",
+      "start": "Where it began",
+      "startDetail": "The first message in the available history",
+      "peak": "Busiest month",
+      "peakDetail": "{count} messages were exchanged this month",
+      "longestConversation": "Longest conversation",
+      "conversationDetail": "{duration} and {count} messages",
+      "longestSilence": "Longest silence",
+      "silenceRange": "{start} – {end}",
+      "silenceDetailWithMember": "After {duration}, {name} spoke first",
+      "silenceDetail": "The conversation resumed after {duration}",
+      "end": "Where the record stands",
+      "endDetail": "The latest message in the available history",
+      "filteredEndDetail": "The latest message within the selected range"
+    },
+    "duration": {
+      "lessThanMinute": "Under 1 minute",
+      "minutes": "{count} min",
+      "hours": "{count} hr",
+      "hoursMinutes": "{hours} hr {minutes} min",
+      "days": "{count} days",
+      "daysHours": "{days} days {hours} hr",
+      "months": "{count} months",
+      "years": "{count} years",
+      "yearsMonths": "{years} years {months} months"
+    },
+    "watermark": "Chat Journey"
   },
   "timeline": {
     "title": "Timeline View",

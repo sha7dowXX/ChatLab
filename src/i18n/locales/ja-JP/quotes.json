@@ -1,21 +1,17 @@
 {
   "wordcloud": {
     "loading": "単語頻度を分析中...",
-    "sidebar": {
-      "filter": "フィルター設定",
-      "style": "スタイル設定"
-    },
     "stats": {
-      "messagesLabel": "メッセージ数",
       "wordsLabel": "総単語数",
-      "uniqueLabel": "ユニーク単語"
+      "clickHint": "ヒント：ワードクラウドをクリックすると関連メッセージを表示できます"
     },
     "config": {
       "maxWords": "表示単語数",
       "sizeScale": "フォントサイズ",
       "userFilter": "ユーザーフィルター",
       "posFilter": "品詞フィルター",
-      "enableStopwords": "ストップワードを除外"
+      "enableStopwords": "ストップワードを除外",
+      "dict": "辞書"
     },
     "size": {
       "small": "小",
@@ -35,10 +31,25 @@
     "empty": {
       "title": "ワードクラウドデータがありません",
       "description": "現在の絞り込み条件では、ワードクラウドを作れるほどテキストメッセージがありません"
+    },
+    "dict": {
+      "zhCN": "簡体字中国語",
+      "zhTW": "繁体字中国語",
+      "download": "辞書をダウンロード",
+      "download_zh-CN": "簡体字辞書をダウンロード",
+      "download_zh-TW": "繁体字辞書をダウンロード",
+      "needDownload": "ワードクラウドは内蔵トークナイザーの結果で表示されています。中国語辞書をダウンロードすると分かち書きの精度が向上します。",
+      "downloadHint": "~8MB",
+      "downloadSuccess": "辞書のダウンロードが完了しました",
+      "downloadFailed": "辞書のダウンロードに失敗しました",
+      "promptTitle": "繁体字中国語辞書",
+      "promptDescription": "繁体字中国語をご使用中です。ワードクラウドの精度を上げるため、繁体字辞書のダウンロードをお勧めします。今すぐダウンロードしますか？（約8MB）",
+      "promptDownload": "今すぐダウンロード",
+      "promptLater": "後で"
     }
   },
   "keywords": {
-    "title": "🔍 キーワードランキング",
+    "title": "キーワードランキング",
     "description": "グループチャットのキーワード使用ランキングを分析します。カスタムランキングも作成できます",
     "countTemplate": "全 {count} 名のメンバー",
     "templateLabel": "テンプレート:",
@@ -64,8 +75,6 @@
       "templateNamePlaceholder": "例：ポジティブ",
       "keywords": "キーワード",
       "keywordPlaceholder": "入力して Enter で追加",
-      "cancel": "キャンセル",
-      "save": "保存",
       "update": "更新"
     },
     "templates": {
@@ -107,22 +116,112 @@
     }
   },
   "hotRepeat": {
-    "title": "🔥 盛り上がった復唱",
+    "title": "盛り上がった復唱",
     "loading": "リピートデータを読み込み中...",
     "description": "1 回の復唱で最も多くの人が参加したフレーズ",
     "countTemplate": "全 {count} 件の復唱",
     "people": "{count}人",
     "times": "{count} 回",
-    "colon": "：",
     "viewChat": "チャット履歴を見る",
     "empty": "リピートデータがありません"
   },
+  "topicProfile": {
+    "heroPrefix": "",
+    "heroMiddle": "件のメッセージを分析し、",
+    "heroMiddleSecond": "その結果、",
+    "heroSuffix": "個のユニークな単語が見つかりました",
+    "topTopicsPrefix": "よく話すトピック：",
+    "hotTopic": "注目トピック",
+    "hotTopicDesc": "{count} 回出現",
+    "richness": "語彙の豊かさ",
+    "richnessValue": "{value}%",
+    "richnessDesc": "ユニーク {unique} / 合計 {total}",
+    "chatStyle": "チャットスタイル",
+    "styleEncyclopedia": "百科事典タイプ",
+    "styleEncyclopediaDesc": "名詞が多く、人・場所・物の話題が中心",
+    "styleAction": "アクション派",
+    "styleActionDesc": "動詞が多く、行動や計画の話題が中心",
+    "styleExpressive": "表現豊かタイプ",
+    "styleExpressiveDesc": "形容詞が多く、感情表現が豊か",
+    "styleBalanced": "バランス型",
+    "styleBalancedDesc": "多様なトピックでバランスの取れた会話",
+    "expressionStyle": "表現スタイル",
+    "expressionCasual": "カジュアル",
+    "expressionCasualDesc": "短い言葉でリラックスした表現",
+    "expressionFormal": "フォーマル",
+    "expressionFormalDesc": "丁寧な言葉遣いで正確な表現",
+    "expressionMixed": "ミックス",
+    "expressionMixedDesc": "カジュアルとフォーマルの混合",
+    "watermark": "トピックプロフィール",
+    "sharedTopics": "共通のトピック"
+  },
   "catchphrase": {
-    "title": "💬 口癖分析",
+    "title": "グループメンバーの口癖",
+    "description": "各メンバーを象徴する繰り返しフレーズを確認できます",
+    "memberTitle": "{name}の口癖",
+    "memberDescription": "このメンバーがよく使うフレーズを回数順に表示します",
     "loading": "口癖データを分析中...",
-    "description": "{count} 名の高頻度フレーズを分析しました",
-    "countTemplate": "全 {count} 名のメンバー",
     "times": "{count}回",
-    "empty": "口癖データがありません"
+    "memberCount": "全{count}人",
+    "phraseCount": "全{count}件の口癖",
+    "viewChat": "関連メッセージを表示",
+    "empty": {
+      "title": "口癖データがありません"
+    }
+  },
+  "languagePreference": {
+    "loading": "言語傾向を分析中...",
+    "empty": "言語分析に十分なテキストメッセージがありません",
+    "card": {
+      "diversityTitle": "語彙の深さ",
+      "diversityDesc": "ユニーク単語の割合",
+      "styleTitle": "チャット気質",
+      "styleDesc": "品詞分布に基づく表現スタイル",
+      "punctTitle": "句読点パーソナリティ",
+      "punctDesc": "最も使われる句読点スタイル",
+      "watermark": "言語傾向 · Language Preference",
+      "radarFactual": "事実性",
+      "radarActive": "行動力",
+      "radarDescriptive": "描写力",
+      "radarAffable": "親和力",
+      "radarIntense": "強調度",
+      "radarNoun": "名詞",
+      "radarVerb": "動詞",
+      "radarAdj": "形容詞",
+      "radarModal": "終助詞",
+      "radarAdv": "副詞"
+    },
+    "catchphrasePK": {
+      "title": "口癖バトル",
+      "sharedCount": "{count} 個の共通口癖",
+      "hint": "クリックで関連メッセージを表示。ピンク枠は共通の口癖です。"
+    },
+    "pos": {
+      "title": "品詞ポートレート",
+      "styleEncyclopedia": "百科事典タイプ",
+      "styleAction": "行動派",
+      "styleExpressive": "感性派",
+      "styleBalanced": "バランス型"
+    },
+    "modal": {
+      "title": "終助詞プロフィール",
+      "toneSoft": "やわらかい",
+      "toneCurious": "好奇心旺盛",
+      "toneCasual": "カジュアル",
+      "toneCalm": "落ち着き",
+      "toneMixed": "多彩なスタイル",
+      "empty": "終助詞データがありません"
+    },
+    "punctuation": {
+      "title": "句読点パーソナリティ",
+      "none": "句読点なし",
+      "personalityDeep": "深い思考型",
+      "personalityPassionate": "情熱的",
+      "personalityCurious": "好奇心型",
+      "personalityCheerful": "明るい",
+      "personalityFreeflow": "自由型",
+      "personalityPrecise": "几帳面",
+      "empty": "句読点データがありません"
+    }
   }
 }

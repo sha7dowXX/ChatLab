@@ -1,37 +1,101 @@
 <script setup lang="ts">
 import { storeToRefs } from 'pinia'
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { shouldEnableContactsEntry } from '@openchatlab/core'
 import type { AnalysisSession } from '@/types/base'
-import dayjs from 'dayjs'
-import relativeTime from 'dayjs/plugin/relativeTime'
-import 'dayjs/locale/zh-cn'
-import 'dayjs/locale/en'
+import LazyAvatar from '@/components/common/avatar/LazyAvatar.vue'
 import SidebarButton from './sidebar/SidebarButton.vue'
+import SidebarCollapseButton from './sidebar/SidebarCollapseButton.vue'
 import SidebarFooter from './sidebar/SidebarFooter.vue'
+import SidebarSortPopover from './sidebar/SidebarSortPopover.vue'
+import { resolveSidebarSessionContentState } from './sidebar/session-content-state'
+import {
+  buildUpdateNoticeCacheEntry,
+  buildUpdateNoticeState,
+  getUsableCachedUpdateNotice,
+  type UpdateNoticeCache,
+  type UpdateNoticeState,
+} from './sidebar/updateNotice'
+import { CompactTabs } from '@/components/navigation'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
+import { usePlatformService } from '@/services'
+import { useHostLocale } from '@/plugins/insight-vue'
+import { DEFAULT_INSIGHT_NAVIGATION_GROUP_ID } from '@/navigation/layout'
+import { useNavigationLayout } from '@/navigation/vue'
+import { IS_ELECTRON } from '@/utils/platform'
+import logoSvg from '@/assets/images/logo.svg'
 
-dayjs.extend(relativeTime)
+interface SidebarInputExpose {
+  inputRef: Pick<HTMLInputElement, 'focus' | 'select'> | null
+}
+
+const props = withDefaults(
+  defineProps<{
+    backendFeatures: boolean
+    insightEnabled?: boolean
+    settingsEnabled?: boolean
+  }>(),
+  {
+    insightEnabled: false,
+    settingsEnabled: false,
+  }
+)
+
 const { t } = useI18n()
+const { translate } = useHostLocale()
+const LATEST_VERSION_URL = 'https://chatlab.fun/latest-version'
+const UPDATE_CHECK_CACHE_KEY = 'chatlab:latest-version-check:v2'
+const hasMacTitlebarInset =
+  IS_ELECTRON && typeof navigator !== 'undefined' && navigator.platform.toLowerCase().includes('mac')
 
 const sessionStore = useSessionStore()
 const layoutStore = useLayoutStore()
-const { sessions, sortedSessions } = storeToRefs(sessionStore)
+const { sessions, sortedSessions, filterType, loadState, loadError } = storeToRefs(sessionStore)
 const { isSidebarCollapsed: isCollapsed } = storeToRefs(layoutStore)
 const { toggleSidebar } = layoutStore
 const router = useRouter()
 const route = useRoute()
+const { controller: navigationLayoutController, snapshot: navigationLayoutSnapshot } = useNavigationLayout()
+const SESSION_ROW_SIZE = 44
+const SESSION_LIST_BOTTOM_PADDING = 32
 
 // 是否在首页
 const isHomePage = computed(() => route.path === '/')
+const isPeoplePage = computed(() => String(route.name ?? '').startsWith('people-'))
+const isGlobalAIPage = computed(() => route.name === 'global-ai')
+const privateSessionCount = computed(() => sessions.value.filter((session) => session.type === 'private').length)
+const groupSessionCount = computed(() => sessions.value.filter((session) => session.type === 'group').length)
+const showContactsEntry = computed(() =>
+  shouldEnableContactsEntry({
+    privateSessionCount: privateSessionCount.value,
+    groupSessionCount: groupSessionCount.value,
+  })
+)
+const showInsightNavigation = computed(() => props.backendFeatures || props.insightEnabled)
+const resolvedPrimaryNavigation = computed(() => {
+  void navigationLayoutSnapshot.value.revision
+  return navigationLayoutController.getResolvedLayout().primary
+})
+const activeInsightPageId = computed(() => String(route.meta.insightPageId ?? ''))
+
+function navigationGroupTitle(groupId: string, customTitle?: string): string {
+  if (customTitle) return customTitle
+  return groupId === DEFAULT_INSIGHT_NAVIGATION_GROUP_ID ? t('layout.insight') : groupId
+}
+
+function openInsightRoute(routeName: string): void {
+  void router.push({ name: routeName })
+}
 
 // 重命名相关状态
 const showRenameModal = ref(false)
 const renameTarget = ref<AnalysisSession | null>(null)
 const newName = ref('')
-const renameInputRef = ref<HTMLInputElement | null>(null)
+const renameInputRef = ref<SidebarInputExpose | null>(null)
 
 // 删除确认相关状态
 const showDeleteModal = ref(false)
@@ -39,10 +103,22 @@ const deleteTarget = ref<AnalysisSession | null>(null)
 
 // 版本号
 const version = ref('')
+const latestVersion = ref('')
+const hasUpdate = ref(false)
+const showUpdateModal = ref(false)
+const isStartingUpdate = ref(false)
 
 // 搜索相关状态
 const showSearch = ref(false)
 const searchQuery = ref('')
+const sessionListRef = ref<HTMLElement | null>(null)
+
+// 筛选 Tab 配置
+const filterTabItems = computed(() => [
+  { id: 'all', label: t('layout.filter.all') },
+  { id: 'private', label: t('layout.filter.private') },
+  { id: 'group', label: t('layout.filter.group') },
+])
 
 // 过滤后的会话列表
 const filteredSortedSessions = computed(() => {
@@ -53,6 +129,32 @@ const filteredSortedSessions = computed(() => {
   return sortedSessions.value.filter((s) => s.name.toLowerCase().includes(query))
 })
 
+const sessionContentState = computed(() =>
+  resolveSidebarSessionContentState({
+    loadState: loadState.value,
+    sessionCount: sessions.value.length,
+    filteredSessionCount: filteredSortedSessions.value.length,
+    hasSearchQuery: searchQuery.value.trim().length > 0,
+  })
+)
+
+const sessionVirtualizer = useVirtualizer(
+  computed(() => ({
+    count: filteredSortedSessions.value.length,
+    getScrollElement: () => sessionListRef.value,
+    estimateSize: () => SESSION_ROW_SIZE,
+    overscan: 8,
+    getItemKey: (index: number) => filteredSortedSessions.value[index]?.id ?? index,
+  }))
+)
+
+const virtualSessionItems = computed(() => sessionVirtualizer.value.getVirtualItems())
+const virtualSessionListHeight = computed(() => sessionVirtualizer.value.getTotalSize() + SESSION_LIST_BOTTOM_PADDING)
+
+function virtualSessionAt(index: number): AnalysisSession {
+  return filteredSortedSessions.value[index]!
+}
+
 // 切换搜索框显示
 function toggleSearch() {
   showSearch.value = !showSearch.value
@@ -61,14 +163,25 @@ function toggleSearch() {
   }
 }
 
-// 加载会话列表和版本号
+let unlistenImportCompleted: (() => void) | null = null
+
 onMounted(async () => {
-  sessionStore.loadSessions()
   try {
-    version.value = await window.api.app.getVersion()
+    version.value = await usePlatformService().getVersion()
+    if (props.backendFeatures) void checkUpdateNotice()
   } catch (e) {
     console.error('Failed to get version', e)
   }
+
+  if (IS_ELECTRON) {
+    unlistenImportCompleted = window.apiServerApi.onImportCompleted(() => {
+      sessionStore.loadSessions()
+    })
+  }
+})
+
+onUnmounted(() => {
+  unlistenImportCompleted?.()
 })
 
 function handleImport() {
@@ -76,8 +189,133 @@ function handleImport() {
   router.push('/')
 }
 
-function formatTime(timestamp: number): string {
-  return dayjs.unix(timestamp).fromNow()
+function openContacts() {
+  router.push({ name: 'people-contacts' })
+}
+
+function openGlobalAI() {
+  router.push({ name: 'global-ai' })
+}
+
+function openSession(session: AnalysisSession) {
+  router.push({
+    name: getSessionRouteName(session),
+    params: { id: session.id },
+    query: route.query,
+  })
+}
+
+function readUpdateCheckCache(): UpdateNoticeCache | null {
+  try {
+    const raw = window.localStorage.getItem(UPDATE_CHECK_CACHE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw) as {
+      lastCheckTime?: unknown
+      latestVersion?: unknown
+      hasUpdate?: unknown
+      currentVersion?: unknown
+    }
+    if (typeof data.lastCheckTime !== 'number') return null
+    if (typeof data.hasUpdate !== 'boolean') return null
+    if (typeof data.currentVersion !== 'string') return null
+    return {
+      lastCheckTime: data.lastCheckTime,
+      latestVersion: typeof data.latestVersion === 'string' ? data.latestVersion : '',
+      hasUpdate: data.hasUpdate,
+      currentVersion: data.currentVersion,
+    }
+  } catch {
+    return null
+  }
+}
+
+function writeUpdateCheckCache(state: UpdateNoticeState | null) {
+  const cacheEntry = buildUpdateNoticeCacheEntry(state)
+  if (!cacheEntry) return
+
+  try {
+    window.localStorage.setItem(UPDATE_CHECK_CACHE_KEY, JSON.stringify(cacheEntry))
+  } catch {
+    // localStorage 不可用时忽略，更新提醒是非关键能力。
+  }
+}
+
+function setUpdateNoticeState(state: UpdateNoticeState | null) {
+  latestVersion.value = state?.latestVersion ?? ''
+  hasUpdate.value = state?.hasUpdate ?? false
+}
+
+function parseLatestVersionPayload(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null
+  const versionValue = (data as { version?: unknown }).version
+  return typeof versionValue === 'string' ? versionValue : null
+}
+
+async function fetchUpdateNoticeState(): Promise<UpdateNoticeState | null> {
+  const platformService = usePlatformService()
+  if (IS_ELECTRON) {
+    const result = await platformService.fetchRemoteConfig(LATEST_VERSION_URL)
+    if (!result.success) return null
+    return buildUpdateNoticeState({
+      latestVersion: parseLatestVersionPayload(result.data),
+      currentVersion: version.value,
+    })
+  }
+
+  const result = await platformService.checkUpdate()
+  if (!result || result.error) return null
+  return buildUpdateNoticeState({
+    latestVersion: result.latestVersion,
+    currentVersion: result.currentVersion,
+    serverHasUpdate: result.hasUpdate,
+  })
+}
+
+async function checkUpdateNotice() {
+  if (IS_ELECTRON) {
+    const cache = readUpdateCheckCache()
+    const usableCache = cache
+      ? getUsableCachedUpdateNotice(cache, { isElectron: true, currentVersion: version.value })
+      : null
+    if (usableCache) {
+      setUpdateNoticeState(usableCache)
+      return
+    }
+  }
+
+  try {
+    const nextState = await fetchUpdateNoticeState()
+    if (!nextState) {
+      setUpdateNoticeState(null)
+      return
+    }
+    if (IS_ELECTRON) writeUpdateCheckCache(nextState)
+    setUpdateNoticeState(nextState)
+  } catch (error) {
+    setUpdateNoticeState(null)
+    console.debug('Update notice check failed:', error)
+  }
+}
+
+function openUpdateModal() {
+  showUpdateModal.value = true
+}
+
+async function confirmUpdate() {
+  if (!IS_ELECTRON) {
+    showUpdateModal.value = false
+    return
+  }
+
+  isStartingUpdate.value = true
+  try {
+    await usePlatformService().checkUpdate()
+    showUpdateModal.value = false
+  } finally {
+    setTimeout(() => {
+      isStartingUpdate.value = false
+    }, 3000)
+  }
 }
 
 // 打开重命名弹窗
@@ -87,8 +325,8 @@ function openRenameModal(session: AnalysisSession) {
   showRenameModal.value = true
   // 等待 DOM 更新后聚焦输入框
   nextTick(() => {
-    renameInputRef.value?.focus()
-    renameInputRef.value?.select()
+    renameInputRef.value?.inputRef?.focus()
+    renameInputRef.value?.inputRef?.select()
   })
 }
 
@@ -121,15 +359,29 @@ function openDeleteModal(session: AnalysisSession) {
 async function confirmDelete() {
   if (!deleteTarget.value) return
 
-  await sessionStore.deleteSession(deleteTarget.value.id)
+  const deletedId = deleteTarget.value.id
+  const isViewingDeleted = route.params.id === deletedId
+  await sessionStore.deleteSession(deletedId)
   showDeleteModal.value = false
   deleteTarget.value = null
+
+  if (isViewingDeleted) {
+    router.push('/')
+  }
 }
 
 // 关闭删除确认弹窗
 function closeDeleteModal() {
   showDeleteModal.value = false
   deleteTarget.value = null
+}
+
+async function copySessionId(sessionId: string) {
+  try {
+    await navigator.clipboard.writeText(sessionId)
+  } catch (error) {
+    console.error('Failed to copy session id:', error)
+  }
 }
 
 // 生成右键菜单项
@@ -146,6 +398,11 @@ function getContextMenuItems(session: AnalysisSession) {
         label: t('layout.contextMenu.rename'),
         class: 'p-2',
         onSelect: () => openRenameModal(session),
+      },
+      {
+        label: t('layout.contextMenu.copyId'),
+        class: 'p-2',
+        onSelect: () => copySessionId(session.id),
       },
       {
         label: t('layout.contextMenu.delete'),
@@ -167,16 +424,16 @@ function isPrivateChat(session: AnalysisSession): boolean {
   return session.type === 'private'
 }
 
-// 获取会话头像显示文字：私聊取最后两字，群聊取前两字
+// 获取会话头像显示文字：私聊取最后一字，群聊取前一字
 function getSessionAvatarText(session: AnalysisSession): string {
   const name = session.name || ''
   if (!name) return '?'
   if (isPrivateChat(session)) {
-    // 私聊：取最后两个字
-    return name.length <= 2 ? name : name.slice(-2)
+    // 私聊：取最后一个字
+    return name.slice(-1)
   } else {
-    // 群聊：取前两个字
-    return name.length <= 2 ? name : name.slice(0, 2)
+    // 群聊：取第一个字
+    return name.slice(0, 1)
   }
 }
 
@@ -187,77 +444,146 @@ function getSessionAvatar(session: AnalysisSession): string | null {
   }
   return session.groupAvatar || null
 }
+
+// 根据会话 ID 生成雅致的莫兰迪色系头像背景和文字颜色
+function getAvatarColorClass(session: AnalysisSession, isActive: boolean) {
+  if (isActive) {
+    return 'bg-primary-50 text-primary-600 dark:bg-primary-500/10 dark:text-primary-400'
+  }
+
+  // 雅致的低饱和度配色方案，提升侧边栏的简洁感与品质感
+  const palettes = [
+    { bg: 'bg-pink-50 dark:bg-pink-950/20', text: 'text-pink-600 dark:text-pink-400' },
+    { bg: 'bg-blue-50 dark:bg-blue-950/20', text: 'text-blue-600 dark:text-blue-400' },
+    { bg: 'bg-emerald-50 dark:bg-emerald-950/20', text: 'text-emerald-600 dark:text-emerald-400' },
+    { bg: 'bg-purple-50 dark:bg-purple-950/20', text: 'text-purple-600 dark:text-purple-400' },
+    { bg: 'bg-amber-50 dark:bg-amber-950/20', text: 'text-amber-600 dark:text-amber-400' },
+  ]
+
+  const idStr = session.id || ''
+  let hash = 0
+  for (let i = 0; i < idStr.length; i++) {
+    hash = idStr.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const index = Math.abs(hash) % palettes.length
+  return `${palettes[index].bg} ${palettes[index].text}`
+}
 </script>
 
 <template>
   <div
-    class="flex h-full flex-col border-r border-gray-200/50 transition-all duration-300 ease-in-out dark:border-gray-800/50"
-    :class="[isCollapsed ? 'w-20' : 'w-72', isHomePage ? '' : 'bg-gray-50 dark:bg-gray-900']"
+    class="flex h-full shrink-0 flex-col overflow-hidden rounded-lg bg-white transition-all duration-300 ease-in-out dark:bg-sidebar-dark"
+    :class="isCollapsed ? 'w-14' : 'w-72'"
   >
-    <div class="flex flex-col p-4 pt-5">
+    <div class="flex flex-col px-2 pb-4" :class="hasMacTitlebarInset ? 'pt-8' : 'pt-5'">
       <!-- Header -->
       <div
         class="mb-2 flex items-center"
         :class="[isCollapsed ? 'justify-center' : 'justify-between']"
         style="-webkit-app-region: drag"
       >
-        <div v-if="!isCollapsed" class="ml-2 flex items-baseline">
-          <div class="text-2xl font-black tracking-tight text-pink-500">
-            {{ t('layout.brand') }}
+        <div v-if="!isCollapsed" class="ml-2 flex items-center">
+          <img :src="logoSvg" alt="ChatLab" class="h-6 w-6 select-none pointer-events-none" />
+          <div class="ml-2 flex items-baseline gap-2">
+            <div class="text-xl font-black tracking-tight text-pink-500">
+              {{ t('layout.brand') }}
+            </div>
+            <span class="text-xs text-gray-400">v{{ version }}</span>
           </div>
-          <span class="ml-2 text-xs text-gray-400">v{{ version }}</span>
+          <button
+            v-if="hasUpdate"
+            type="button"
+            class="ml-1.5 rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-sm shadow-red-500/20 transition hover:bg-red-600"
+            style="-webkit-app-region: no-drag"
+            @click="openUpdateModal"
+          >
+            {{ t('layout.updateNotice.tag') }}
+          </button>
         </div>
-        <UTooltip
-          :text="isCollapsed ? t('layout.tooltip.expand') : t('layout.tooltip.collapse')"
-          :popper="{ placement: 'right' }"
-          style="-webkit-app-region: no-drag"
+        <SidebarCollapseButton
+          :collapsed="isCollapsed"
+          :accessible-label="t(isCollapsed ? 'common.expandSidebar' : 'common.collapseSidebar')"
+          @click="toggleSidebar"
         >
-          <UButton
-            icon="i-heroicons-bars-3"
-            color="gray"
-            variant="ghost"
-            size="md"
-            class="flex h-12 w-12 cursor-pointer items-center justify-center rounded-full hover:bg-gray-200/60 dark:hover:bg-gray-800"
-            @click="toggleSidebar"
-          />
-        </UTooltip>
+          <img :src="logoSvg" alt="ChatLab" class="size-5 select-none pointer-events-none group-hover:hidden" />
+          <UIcon name="i-lucide-panel-right-open" class="size-4 hidden scale-x-[-1] group-hover:block" />
+        </SidebarCollapseButton>
       </div>
 
-      <!-- 新建分析 -->
-      <SidebarButton icon="i-heroicons-plus" :title="t('layout.newAnalysis')" @click="handleImport" />
+      <div class="space-y-1">
+        <!-- 新建分析 -->
+        <SidebarButton
+          icon="i-heroicons-plus"
+          :title="t('layout.newAnalysis')"
+          :active="isHomePage"
+          @click="handleImport"
+        />
+
+        <SidebarButton
+          v-if="props.backendFeatures"
+          icon="i-heroicons-chat-bubble-left-ellipsis"
+          :title="t('analysis.tabs.aiChat')"
+          :active="isGlobalAIPage"
+          @click="openGlobalAI"
+        />
+
+        <template v-if="showInsightNavigation">
+          <SidebarButton
+            v-for="item in resolvedPrimaryNavigation"
+            :key="`${item.kind}:${item.kind === 'entry' ? item.entryId : item.id}`"
+            :icon="item.kind === 'entry' ? item.page.icon : 'i-heroicons-presentation-chart-bar'"
+            :title="item.kind === 'entry' ? translate(item.page.title) : navigationGroupTitle(item.id, item.title)"
+            :active="
+              item.kind === 'entry'
+                ? activeInsightPageId === item.page.id
+                : item.entries.some(({ page }) => page.id === activeInsightPageId)
+            "
+            @click="openInsightRoute(item.kind === 'entry' ? item.page.routeName : item.entries[0]!.page.routeName)"
+          />
+        </template>
+
+        <SidebarButton
+          v-if="props.backendFeatures && showContactsEntry"
+          icon="i-lucide-users"
+          icon-class="scale-90"
+          :title="t('layout.relationships')"
+          :active="isPeoplePage"
+          @click="openContacts"
+        />
+      </div>
     </div>
 
     <!-- Session List -->
     <div class="flex-1 relative min-h-0 flex flex-col">
-      <!-- 聊天记录标题 - 固定在顶部，不随列表滚动 -->
-      <div v-if="!isCollapsed && sessions.length > 0" class="px-4 mb-2">
-        <div class="flex items-center justify-between">
-          <UTooltip :text="t('layout.tooltip.hint')" :popper="{ placement: 'right' }">
-            <div class="flex items-center gap-1 pl-3">
-              <div class="text-sm font-medium text-gray-500">{{ t('layout.chatHistory') }}</div>
-              <UIcon name="i-heroicons-question-mark-circle" class="size-3.5 text-gray-400" />
+      <!-- 筛选与排序 - 固定在顶部，不随列表滚动 -->
+      <div v-if="!isCollapsed && sessions.length > 0" class="mb-2">
+        <CompactTabs v-model="filterType" :items="filterTabItems" size="sm" :bordered="false">
+          <template #right>
+            <div class="flex items-center gap-0.5">
+              <UTooltip :text="t('layout.tooltip.search')" :content="{ side: 'bottom' }">
+                <UButton
+                  :icon="showSearch ? 'i-heroicons-x-mark' : 'i-heroicons-magnifying-glass'"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  @click="toggleSearch"
+                />
+              </UTooltip>
+              <SidebarSortPopover />
+              <UTooltip v-if="props.backendFeatures" :text="t('layout.manage')" :content="{ side: 'bottom' }">
+                <UButton
+                  icon="i-heroicons-rectangle-stack"
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  @click="layoutStore.openSettings('data')"
+                />
+              </UTooltip>
             </div>
-          </UTooltip>
-          <div class="flex items-center gap-2">
-            <button
-              class="text-xs font-medium text-gray-400 hover:text-gray-900 transition-colors dark:hover:text-white"
-              @click="router.push({ name: 'settings', query: { tab: 'data' } })"
-            >
-              {{ t('layout.manage') }}
-            </button>
-            <UTooltip :text="t('layout.tooltip.search')" :popper="{ placement: 'right' }">
-              <UButton
-                :icon="showSearch ? 'i-heroicons-x-mark' : 'i-heroicons-magnifying-glass'"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                @click="toggleSearch"
-              />
-            </UTooltip>
-          </div>
-        </div>
+          </template>
+        </CompactTabs>
         <!-- 搜索框 -->
-        <div v-if="showSearch" class="mt-2">
+        <div v-if="showSearch" class="mt-2 px-4">
           <UInput
             v-model="searchQuery"
             :placeholder="t('layout.searchPlaceholder')"
@@ -269,102 +595,137 @@ function getSessionAvatar(session: AnalysisSession): string | null {
       </div>
 
       <!-- 聊天记录列表 - 可滚动区域，滚动条贴边 -->
-      <div class="flex-1 overflow-y-auto">
-        <div v-if="sessions.length === 0 && !isCollapsed" class="py-8 text-center text-sm text-gray-500">
+      <div ref="sessionListRef" class="session-list flex-1 overflow-y-auto">
+        <div
+          v-if="sessionContentState === 'loading'"
+          class="flex justify-center py-4"
+          role="status"
+          :aria-label="t('common.loading')"
+        >
+          <UIcon name="i-lucide-loader-2" class="h-4 w-4 animate-spin text-gray-400 dark:text-gray-500" />
+        </div>
+
+        <div
+          v-else-if="sessionContentState === 'error'"
+          :class="isCollapsed ? 'flex justify-center py-4' : 'px-4 py-8 text-center'"
+        >
+          <template v-if="!isCollapsed">
+            <p class="text-sm text-gray-600 dark:text-gray-300">{{ t('layout.sessionLoadFailed') }}</p>
+            <p v-if="loadError" class="mt-1 line-clamp-2 text-xs text-gray-400">{{ loadError }}</p>
+            <UButton size="xs" variant="soft" class="mt-3" @click="sessionStore.loadSessions()">
+              {{ t('common.retry') }}
+            </UButton>
+          </template>
+          <UTooltip v-else :text="t('common.retry')" :content="{ side: 'right' }">
+            <UButton
+              icon="i-lucide-refresh-cw"
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              :aria-label="t('common.retry')"
+              @click="sessionStore.loadSessions()"
+            />
+          </UTooltip>
+        </div>
+
+        <div v-else-if="sessionContentState === 'empty' && !isCollapsed" class="py-8 text-center text-sm text-gray-500">
           {{ t('layout.noRecords') }}
         </div>
 
         <!-- 搜索无结果 -->
         <div
-          v-else-if="filteredSortedSessions.length === 0 && searchQuery.trim() && !isCollapsed"
+          v-else-if="sessionContentState === 'search-empty' && !isCollapsed"
           class="py-8 text-center text-sm text-gray-500"
         >
           {{ t('layout.noSearchResult') }}
         </div>
 
-        <div class="space-y-1 pb-8" :class="[isCollapsed ? '' : 'px-4']">
-          <UContextMenu
-            v-for="session in filteredSortedSessions"
-            :key="session.id"
-            :items="getContextMenuItems(session)"
+        <div
+          v-else-if="sessionContentState === 'list'"
+          class="relative"
+          :style="{ height: `${virtualSessionListHeight}px` }"
+        >
+          <div
+            v-for="virtualItem in virtualSessionItems"
+            :key="String(virtualItem.key)"
+            class="absolute left-2 right-2"
+            :style="{ transform: `translateY(${virtualItem.start}px)` }"
           >
-            <!-- 侧边栏折叠时，hover 显示完整会话名称（Tooltip 需绑定到真实 DOM） -->
-            <UTooltip :text="session.name" :disabled="!isCollapsed || !session.name" :popper="{ placement: 'right' }">
-              <div
-                class="group relative flex items-center p-2 text-left transition-colors"
-                :class="[
-                  route.params.id === session.id && !isCollapsed
-                    ? 'bg-primary-100 text-gray-900 dark:bg-primary-900/30 dark:text-primary-100'
-                    : 'text-gray-700 dark:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-800',
-                  isCollapsed
-                    ? 'justify-center cursor-pointer h-13 w-13 rounded-full ml-3.5'
-                    : 'cursor-pointer w-full rounded-full',
-                ]"
-                @click="router.push({ name: getSessionRouteName(session), params: { id: session.id } })"
+            <UContextMenu :items="getContextMenuItems(virtualSessionAt(virtualItem.index))">
+              <!-- 侧边栏折叠时，hover 显示完整会话名称（Tooltip 需绑定到真实 DOM） -->
+              <UTooltip
+                :text="virtualSessionAt(virtualItem.index).name"
+                :disabled="!isCollapsed || !virtualSessionAt(virtualItem.index).name"
+                :content="{ side: 'right' }"
               >
-                <!-- 会话头像 -->
-                <!-- 有头像图片时显示图片 -->
-                <img
-                  v-if="getSessionAvatar(session)"
-                  :src="getSessionAvatar(session)!"
-                  :alt="session.name"
-                  class="h-9 w-9 min-w-9 shrink-0 rounded-full object-cover"
-                  :class="[isCollapsed ? '' : 'mr-3']"
-                />
-                <!-- 无头像时显示图标/文字 -->
                 <div
-                  v-else
-                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
+                  class="group relative flex items-center text-left transition-all duration-200 cursor-pointer"
                   :class="[
-                    route.params.id === session.id
-                      ? isPrivateChat(session)
-                        ? 'bg-pink-600 text-white dark:bg-pink-500 dark:text-white'
-                        : 'bg-primary-600 text-white dark:bg-primary-500 dark:text-white'
-                      : 'bg-gray-400 text-white dark:bg-gray-600 dark:text-white',
-                    isCollapsed ? '' : 'mr-3',
+                    route.params.id === virtualSessionAt(virtualItem.index).id
+                      ? 'text-primary-600 font-medium dark:text-primary-400'
+                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200/20 dark:hover:bg-white/[0.04]',
+                    isCollapsed
+                      ? 'justify-center h-10 w-10 rounded-lg mx-auto'
+                      : 'h-10 w-full rounded-xl p-1.5 px-2.5 pl-1.5',
                   ]"
+                  @click="openSession(virtualSessionAt(virtualItem.index))"
                 >
-                  <!-- 折叠时显示缩略名字，不折叠时显示图标 -->
-                  <template v-if="isCollapsed">
-                    {{ getSessionAvatarText(session) }}
-                  </template>
-                  <template v-else>
-                    <UIcon
-                      :name="isPrivateChat(session) ? 'i-heroicons-user' : 'i-heroicons-chat-bubble-left-right'"
-                      class="h-4 w-4"
-                    />
-                  </template>
-                </div>
+                  <!-- 激活指示器：在展开和折叠下，都优雅地贴在侧边栏最左侧边缘 -->
+                  <div
+                    class="absolute -left-2 top-1/2 w-[3px] -translate-y-1/2 rounded-r-full bg-primary-500 transition-all duration-200"
+                    :class="[
+                      route.params.id === virtualSessionAt(virtualItem.index).id
+                        ? 'h-4.5 opacity-100'
+                        : 'h-0 opacity-0 group-hover:h-2.5 group-hover:opacity-40',
+                    ]"
+                  />
 
-                <!-- Session Info -->
-                <div v-if="!isCollapsed" class="min-w-0 flex-1">
-                  <div class="flex items-center justify-between gap-2">
-                    <p class="truncate text-sm font-medium">
-                      {{ session.name }}
+                  <!-- 会话头像 -->
+                  <LazyAvatar
+                    :src="getSessionAvatar(virtualSessionAt(virtualItem.index))"
+                    :alt="virtualSessionAt(virtualItem.index).name"
+                    :text="getSessionAvatarText(virtualSessionAt(virtualItem.index))"
+                    :root-class="['h-7 w-7 min-w-7 shrink-0', isCollapsed ? '' : 'mr-2.5']"
+                    image-class="h-7 w-7 rounded-lg object-cover"
+                    :fallback-class="[
+                      'flex h-7 w-7 items-center justify-center rounded-lg text-xs font-semibold select-none',
+                      getAvatarColorClass(
+                        virtualSessionAt(virtualItem.index),
+                        route.params.id === virtualSessionAt(virtualItem.index).id
+                      ),
+                    ]"
+                  />
+
+                  <!-- Session Info -->
+                  <div v-if="!isCollapsed" class="min-w-0 flex-1">
+                    <div class="flex items-center justify-between gap-1.5">
+                      <p class="truncate text-xs font-medium">
+                        {{ virtualSessionAt(virtualItem.index).name }}
+                      </p>
+                      <UIcon
+                        v-if="sessionStore.isPinned(virtualSessionAt(virtualItem.index).id)"
+                        name="i-lucide-pin"
+                        class="h-3 w-3 shrink-0 text-gray-400/80 rotate-45"
+                      />
+                    </div>
+                    <p class="truncate text-[10px] text-gray-400 dark:text-gray-500 mt-0.5 leading-none">
+                      {{ t('layout.sessionInfo', { count: virtualSessionAt(virtualItem.index).messageCount }) }}
                     </p>
-                    <UIcon
-                      v-if="sessionStore.isPinned(session.id)"
-                      name="i-lucide-pin"
-                      class="h-3.5 w-3.5 shrink-0 text-gray-400 rotate-45"
-                    />
                   </div>
-                  <p class="truncate text-xs text-gray-500 dark:text-gray-400">
-                    {{ t('layout.sessionInfo', { count: session.messageCount, time: formatTime(session.importedAt) }) }}
-                  </p>
                 </div>
-              </div>
-            </UTooltip>
-          </UContextMenu>
+              </UTooltip>
+            </UContextMenu>
+          </div>
         </div>
       </div>
       <!-- 底部渐变蒙层 - 让列表消失更自然（固定在外层容器底部） -->
       <div
-        class="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-50 to-transparent dark:from-gray-900"
+        class="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent dark:from-[#202024]"
       />
     </div>
 
     <!-- Rename Modal -->
-    <UModal v-model:open="showRenameModal">
+    <UModal v-model:open="showRenameModal" :ui="{ content: 'z-50' }">
       <template #content>
         <div class="p-4">
           <h3 class="mb-3 font-semibold text-gray-900 dark:text-white">{{ t('layout.renameModal.title') }}</h3>
@@ -386,7 +747,7 @@ function getSessionAvatar(session: AnalysisSession): string | null {
     </UModal>
 
     <!-- Delete Confirmation Modal -->
-    <UModal v-model:open="showDeleteModal">
+    <UModal v-model:open="showDeleteModal" :ui="{ content: 'z-50' }">
       <template #content>
         <div class="p-4">
           <h3 class="mb-3 font-semibold text-gray-900 dark:text-white">{{ t('layout.deleteModal.title') }}</h3>
@@ -401,7 +762,63 @@ function getSessionAvatar(session: AnalysisSession): string | null {
       </template>
     </UModal>
 
+    <!-- Update Notice Modal -->
+    <UModal v-model:open="showUpdateModal" :ui="{ content: 'z-50' }">
+      <template #content>
+        <div class="p-4">
+          <div class="mb-3 flex items-center gap-2">
+            <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-500 dark:bg-red-950/30">
+              <UIcon name="i-lucide-sparkles" class="h-4 w-4" />
+            </div>
+            <h3 class="font-semibold text-gray-900 dark:text-white">
+              {{ t('layout.updateNotice.title') }}
+            </h3>
+          </div>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            {{ t('layout.updateNotice.message', { version: latestVersion }) }}
+          </p>
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            {{ IS_ELECTRON ? t('layout.updateNotice.desktopHint') : t('layout.updateNotice.cliHint') }}
+          </p>
+          <div
+            v-if="!IS_ELECTRON"
+            class="mt-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+          >
+            clb update
+          </div>
+          <div class="mt-4 flex justify-end gap-2">
+            <UButton variant="soft" :disabled="isStartingUpdate" @click="showUpdateModal = false">
+              {{ t('layout.updateNotice.later') }}
+            </UButton>
+            <UButton v-if="IS_ELECTRON" color="primary" :loading="isStartingUpdate" @click="confirmUpdate">
+              {{ t('layout.updateNotice.updateNow') }}
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
     <!-- Footer -->
-    <SidebarFooter />
+    <SidebarFooter v-if="props.backendFeatures || props.settingsEnabled" />
   </div>
 </template>
+
+<style scoped>
+.session-list {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.session-list:hover {
+  scrollbar-color: rgb(156 163 175 / 0.4) transparent;
+}
+.session-list::-webkit-scrollbar {
+  width: 4px;
+}
+.session-list::-webkit-scrollbar-thumb {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+.session-list:hover::-webkit-scrollbar-thumb {
+  background-color: rgb(156 163 175 / 0.4);
+}
+</style>

@@ -1,14 +1,12 @@
 {
-  "title": "管理",
-  "description": "チャット履歴を管理",
-  "tabs": {
-    "batchManage": "一括管理"
-  },
   "batchManage": {
-    "title": "一括削除",
-    "description": "削除するチャット履歴を選択してください",
     "searchPlaceholder": "チャット名を検索",
     "searchResult": "{count} / {total} 件を検出",
+    "ownerIssues": "{count} 件の会話で自分が未設定です",
+    "ownerStatus": {
+      "missing": "未設定",
+      "unresolved": "要確認"
+    },
     "noSearchResult": "一致するチャット履歴が見つかりません",
     "selectAll": "すべて選択",
     "shiftClickHint": "Shiftキーを押しながらクリックで範囲選択できます",
@@ -18,13 +16,10 @@
     "confirmTitle": "削除の確認",
     "confirmMessage": "選択した {count} 件のチャット履歴を削除しますか？この操作は取り消せません。",
     "deleting": "削除中...",
-    "success": "{count} 件のチャット履歴を削除しました",
-    "error": "削除に失敗しました：{error}",
-    "messageCount": "{count} 件のメッセージ",
-    "importedAt": "{time} にインポート",
     "columns": {
       "name": "名前",
       "platform": "プラットフォーム",
+      "owner": "自分",
       "messages": "メッセージ数",
       "summaries": "AI要約",
       "aiChats": "AI チャット",
@@ -32,9 +27,11 @@
     },
     "clickToEdit": "クリックして名前を編集",
     "merge": "選択項目を結合",
-    "mergeHint": "結合するには同じプラットフォームのチャット履歴を 2 件以上選択してください",
+    "mergeHint": "結合するには同じチャット種別の履歴を 2 件以上選択してください",
     "mergeConfirmTitle": "チャット履歴を結合",
-    "mergeConfirmMessage": "選択した {count} 件のチャット履歴を結合します。元の履歴は削除され、新しい統合履歴が作成されます。",
+    "mergeConfirmMessage": "選択した {count} 件のチャット履歴を結合し、新しい統合履歴を作成します。",
+    "deleteOriginalsLabel": "結合後に元のチャット履歴を削除する",
+    "mergeRiskWarning": "重要な警告：削除は元に戻せず、プラットフォーム間の文脈差により意味が混在する可能性があります。続行前に元データをバックアップしてください。",
     "mergeSteps": {
       "exporting": "チャット履歴をエクスポート中...",
       "parsing": "ファイルを解析中...",

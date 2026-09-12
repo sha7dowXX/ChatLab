@@ -1,0 +1,68 @@
+/**
+ * 社交分析模块（委托给 @openchatlab/core）
+ */
+
+import { openDatabaseAdapter, type TimeFilter } from '../../core'
+import {
+  getMentionAnalysis as coreGetMentionAnalysis,
+  getGroupRelationshipGalaxy as coreGetGroupRelationshipGalaxy,
+  GROUP_RELATIONSHIP_GALAXY_ALGORITHM_VERSION,
+  getLaughAnalysis as coreGetLaughAnalysis,
+  getClusterGraph as coreGetClusterGraph,
+} from '@openchatlab/core'
+import type { GroupRelationshipGalaxyData } from '@openchatlab/shared-types'
+import type { ClusterGraphData, ClusterGraphNode, ClusterGraphLink, ClusterGraphOptions } from '@openchatlab/core'
+
+export type { ClusterGraphData, ClusterGraphNode, ClusterGraphLink, ClusterGraphOptions }
+
+export function getMentionAnalysis(sessionId: string, filter?: TimeFilter): any {
+  const db = openDatabaseAdapter(sessionId)
+  if (!db) return { topMentioners: [], topMentioned: [], totalMentions: 0 }
+  return coreGetMentionAnalysis(db, filter)
+}
+
+export function getGroupRelationshipGalaxy(sessionId: string, filter?: TimeFilter): GroupRelationshipGalaxyData {
+  const db = openDatabaseAdapter(sessionId)
+  if (!db) {
+    return {
+      graph: { nodes: [], edges: [], communities: [] },
+      members: [],
+      edges: [],
+      stats: { totalMembers: 0, activeMembers: 0, displayedMembers: 0, displayedEdges: 0, communityCount: 0 },
+      algorithmVersion: GROUP_RELATIONSHIP_GALAXY_ALGORITHM_VERSION,
+    }
+  }
+  return coreGetGroupRelationshipGalaxy(db, filter)
+}
+
+export function getLaughAnalysis(sessionId: string, filter?: TimeFilter, keywords?: string[]): any {
+  const db = openDatabaseAdapter(sessionId)
+  if (!db)
+    return {
+      rankByRate: [],
+      rankByCount: [],
+      typeDistribution: [],
+      totalLaughs: 0,
+      totalMessages: 0,
+      groupLaughRate: 0,
+    }
+  return coreGetLaughAnalysis(db, filter, keywords)
+}
+
+export function getClusterGraph(
+  sessionId: string,
+  filter?: TimeFilter,
+  options?: ClusterGraphOptions
+): ClusterGraphData {
+  const db = openDatabaseAdapter(sessionId)
+  if (!db) {
+    return {
+      nodes: [],
+      links: [],
+      maxLinkValue: 0,
+      communities: [],
+      stats: { totalMembers: 0, totalMessages: 0, involvedMembers: 0, edgeCount: 0, communityCount: 0 },
+    }
+  }
+  return coreGetClusterGraph(db, filter, options)
+}

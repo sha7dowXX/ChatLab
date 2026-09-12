@@ -8,8 +8,11 @@ import { useI18n } from 'vue-i18n'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import dayjs from 'dayjs'
 import MessageItem from './MessageItem.vue'
+import { chatTopicColorStyle, isMessageInChatTopicHighlight, type ChatTopicHighlight } from './topic-highlight'
 import type { ChatRecordMessage, ChatRecordQuery } from './types'
 import { useSessionStore } from '@/stores/session'
+import { useMessageService } from '@/services'
+import { resolveChatRecordSessionId } from './query-session'
 
 // 时间分隔阈值（秒）：消息间隔超过此值则显示时间分隔线
 const TIME_SEPARATOR_THRESHOLD = 5 * 60 // 5 分钟
@@ -24,12 +27,15 @@ const props = withDefaults(
     externalMessages?: ChatRecordMessage[]
     /** 外部传入时需要高亮的消息 ID 列表（命中的消息） */
     hitMessageIds?: number[]
+    /** 由话题卡片选中的完整消息归属；旧快照按时间范围兼容 */
+    highlightTopic?: ChatTopicHighlight | null
     /** 外部消息变化时的滚动行为：top=滚动到顶部，preserve=保持当前位置 */
     externalScrollBehavior?: 'top' | 'preserve'
   }>(),
   {
     externalMessages: undefined,
     hitMessageIds: () => [],
+    highlightTopic: null,
     externalScrollBehavior: 'top',
   }
 )
@@ -50,6 +56,7 @@ const emit = defineEmits<{
 }>()
 
 const sessionStore = useSessionStore()
+const effectiveSessionId = computed(() => resolveChatRecordSessionId(props.query, sessionStore.currentSessionId))
 
 // 判断是否使用外部传入的消息
 const isExternalMode = computed(() => !!props.externalMessages?.length)
@@ -66,6 +73,7 @@ const isFiltered = computed(() => {
 
 // 消息列表
 const messages = ref<ChatRecordMessage[]>([])
+const highlightedTopicMessageIds = computed(() => new Set(props.highlightTopic?.messageIds ?? []))
 const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const hasMoreBefore = ref(false)
@@ -149,7 +157,7 @@ async function loadInitialMessages() {
     return
   }
 
-  const sessionId = sessionStore.currentSessionId
+  const sessionId = effectiveSessionId.value
   if (!sessionId) {
     messages.value = []
     emit('count-change', 0)
@@ -167,13 +175,14 @@ async function loadInitialMessages() {
 
     if (targetId) {
       // 以目标消息为中心，加载前后各 50 条
+      const messageService = useMessageService()
       const [beforeResult, afterResult] = await Promise.all([
-        window.aiApi.getMessagesBefore(sessionId, targetId, 50, filter, senderId, keywords),
-        window.aiApi.getMessagesAfter(sessionId, targetId, 50, filter, senderId, keywords),
+        messageService.getMessagesBefore(sessionId, targetId, 50, filter, senderId, keywords),
+        messageService.getMessagesAfter(sessionId, targetId, 50, filter, senderId, keywords),
       ])
 
       // 获取目标消息本身
-      const targetMessages = await window.aiApi.getMessageContext(sessionId, targetId, 0)
+      const targetMessages = await messageService.getMessageContext(sessionId, targetId, 0)
 
       // 合并消息列表
       messages.value = mapMessages([...beforeResult.messages, ...targetMessages, ...afterResult.messages])
@@ -183,15 +192,15 @@ async function loadInitialMessages() {
 
       // 设置待滚动的目标
       pendingScrollToId.value = targetId
-    } else if (keywords && keywords.length > 0) {
-      // 有关键词，使用搜索功能
+    } else if ((keywords && keywords.length > 0) || senderId != null) {
+      // 有关键词或成员筛选时，统一走搜索分页；底层支持空关键词 + senderId。
       isSearchMode.value = true
       searchOffset.value = 0
-      const result = await window.aiApi.searchMessages(sessionId, keywords, filter, 100, 0, senderId)
+      const result = await useMessageService().searchMessages(sessionId, keywords ?? [], filter, 100, 0, senderId)
       messages.value = mapMessages(result.messages)
       hasMoreBefore.value = false // 搜索结果从最新开始，没有更早的
-      hasMoreAfter.value = result.messages.length >= 100
       searchOffset.value = result.messages.length
+      hasMoreAfter.value = searchOffset.value < result.total
 
       // 滚动到顶部
       await nextTick()
@@ -200,7 +209,7 @@ async function loadInitialMessages() {
       // 没有目标消息和关键词，加载最新的 100 条
       isSearchMode.value = false
       searchOffset.value = 0
-      const result = await window.aiApi.getAllRecentMessages(sessionId, filter, 100)
+      const result = await useMessageService().getAllRecentMessages(sessionId, filter, 100)
       messages.value = mapMessages(result.messages)
       hasMoreBefore.value = result.messages.length >= 100
       hasMoreAfter.value = false
@@ -264,7 +273,7 @@ function scrollToBottom() {
 async function loadMoreBefore() {
   if (isLoadingMore.value || !hasMoreBefore.value || messages.value.length === 0) return
 
-  const sessionId = sessionStore.currentSessionId
+  const sessionId = effectiveSessionId.value
   if (!sessionId) return
 
   const firstMessage = messages.value[0]
@@ -275,7 +284,14 @@ async function loadMoreBefore() {
   try {
     const query = toRaw(props.query)
     const { filter, senderId, keywords } = buildFilterParams(query)
-    const result = await window.aiApi.getMessagesBefore(sessionId, firstMessage.id, 50, filter, senderId, keywords)
+    const result = await useMessageService().getMessagesBefore(
+      sessionId,
+      firstMessage.id,
+      50,
+      filter,
+      senderId,
+      keywords
+    )
 
     if (result.messages.length > 0) {
       // 记录当前的第一个可见项索引
@@ -311,7 +327,7 @@ async function loadMoreBefore() {
 async function loadMoreAfter() {
   if (isLoadingMore.value || !hasMoreAfter.value || messages.value.length === 0) return
 
-  const sessionId = sessionStore.currentSessionId
+  const sessionId = effectiveSessionId.value
   if (!sessionId) return
 
   isLoadingMore.value = true
@@ -320,9 +336,16 @@ async function loadMoreAfter() {
     const query = toRaw(props.query)
     const { filter, senderId, keywords } = buildFilterParams(query)
 
-    if (isSearchMode.value && keywords && keywords.length > 0) {
+    if (isSearchMode.value) {
       // 搜索模式：使用分页加载
-      const result = await window.aiApi.searchMessages(sessionId, keywords, filter, 50, searchOffset.value, senderId)
+      const result = await useMessageService().searchMessages(
+        sessionId,
+        keywords ?? [],
+        filter,
+        50,
+        searchOffset.value,
+        senderId
+      )
 
       if (result.messages.length > 0) {
         messages.value = [...messages.value, ...mapMessages(result.messages)]
@@ -334,13 +357,20 @@ async function loadMoreAfter() {
         )
       }
 
-      hasMoreAfter.value = result.messages.length >= 50
+      hasMoreAfter.value = searchOffset.value < result.total
     } else {
-      // 普通模式：使用消息 ID 加载
+      // 普通模式：服务端会根据末条消息 ID 解析 (timestamp, id) 复合时间游标。
       const lastMessage = messages.value[messages.value.length - 1]
       if (!lastMessage) return
 
-      const result = await window.aiApi.getMessagesAfter(sessionId, lastMessage.id, 50, filter, senderId, keywords)
+      const result = await useMessageService().getMessagesAfter(
+        sessionId,
+        lastMessage.id,
+        50,
+        filter,
+        senderId,
+        keywords
+      )
 
       if (result.messages.length > 0) {
         messages.value = [...messages.value, ...mapMessages(result.messages)]
@@ -435,12 +465,28 @@ function updateVisibleMessage() {
 }
 
 // 判断是否是目标消息（高亮显示）
-function isTargetMessage(msgId: number): boolean {
+function isTargetMessage(message: ChatRecordMessage): boolean {
+  if (isTopicMessage(message)) return true
   // 外部模式：检查是否在命中列表中
   if (isExternalMode.value && props.hitMessageIds?.length) {
-    return props.hitMessageIds.includes(msgId)
+    return props.hitMessageIds.includes(message.id)
   }
-  return msgId === props.query.scrollToMessageId
+  return message.id === props.query.scrollToMessageId
+}
+
+function isTopicMessage(message: ChatRecordMessage): boolean {
+  const topic = props.highlightTopic
+  if (!topic) return false
+  return isMessageInChatTopicHighlight(topic, message, highlightedTopicMessageIds.value)
+}
+
+function topicSeparatorHighlightClass(index: number): string | undefined {
+  const topic = props.highlightTopic
+  const currentMessage = messages.value[index]
+  const previousMessage = index > 0 ? messages.value[index - 1] : undefined
+  if (!topic || !currentMessage || !previousMessage) return undefined
+  if (!isTopicMessage(currentMessage) || !isTopicMessage(previousMessage)) return undefined
+  return chatTopicColorStyle(topic.colorIndex).message
 }
 
 /**
@@ -555,7 +601,13 @@ defineExpose({
     </div>
 
     <!-- 虚拟滚动容器 -->
-    <div v-else ref="scrollContainerRef" class="h-full overflow-y-auto" @scroll="handleScroll">
+    <div
+      v-else
+      ref="scrollContainerRef"
+      class="h-full overflow-y-auto"
+      data-testid="chat-record-message-scroller"
+      @scroll="handleScroll"
+    >
       <!-- 顶部加载指示器 -->
       <div v-if="hasMoreBefore" class="flex justify-center py-2">
         <span v-if="isLoadingMore" class="text-xs text-gray-400">
@@ -578,7 +630,11 @@ defineExpose({
           :data-index="virtualItem.index"
         >
           <!-- 时间分隔线 -->
-          <div v-if="getTimeSeparator(virtualItem.index)" class="flex items-center justify-center py-2">
+          <div
+            v-if="getTimeSeparator(virtualItem.index)"
+            class="flex items-center justify-center py-2 transition-colors duration-300"
+            :class="topicSeparatorHighlightClass(virtualItem.index)"
+          >
             <div class="flex items-center gap-2 text-xs text-gray-400">
               <div class="h-px w-8 bg-gray-200 dark:bg-gray-700" />
               <span>{{ getTimeSeparator(virtualItem.index) }}</span>
@@ -590,7 +646,8 @@ defineExpose({
           <MessageItem
             :data-message-id="messages[virtualItem.index]?.id"
             :message="messages[virtualItem.index]!"
-            :is-target="isTargetMessage(messages[virtualItem.index]?.id ?? 0)"
+            :is-target="isTargetMessage(messages[virtualItem.index]!)"
+            :topic-color-index="isTopicMessage(messages[virtualItem.index]!) ? highlightTopic?.colorIndex : undefined"
             :highlight-keywords="query.highlightKeywords"
             :is-filtered="isFiltered"
             @view-context="(id) => emit('jump-to-message', id)"

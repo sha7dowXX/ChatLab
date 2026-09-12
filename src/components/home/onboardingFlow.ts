@@ -1,0 +1,32 @@
+export interface LanguageBootstrapResult {
+  shouldOpenLanguageModal: boolean
+  shouldContinue: boolean
+}
+
+export interface PostLanguageBootstrapResult {
+  shouldOpenAgreement: boolean
+  shouldCheckChangelog: boolean
+}
+
+/**
+ * 根据后端保存的语言配置决定首次启动弹窗流程。
+ * 空语言代表新用户，需要先完成语言选择，避免用户协议和语言弹窗同时打开。
+ */
+export function resolveLanguageBootstrap(savedLocale: string | null | undefined): LanguageBootstrapResult {
+  const hasSavedLocale = Boolean(savedLocale)
+  return {
+    shouldOpenLanguageModal: !hasSavedLocale,
+    shouldContinue: hasSavedLocale,
+  }
+}
+
+/**
+ * Keep the mandatory agreement ahead of optional startup content.
+ * Changelog checks may resume only after the current agreement is accepted.
+ */
+export function resolvePostLanguageBootstrap(needsAgreement: boolean): PostLanguageBootstrapResult {
+  return {
+    shouldOpenAgreement: needsAgreement,
+    shouldCheckChangelog: !needsAgreement,
+  }
+}

@@ -4,35 +4,68 @@
  * 包含标题、描述、可选头像/图标，以及默认 slot 用于额外内容
  */
 
-defineProps<{
-  title: string
-  description?: string
-  icon?: string // fallback 图标
-  iconClass?: string // 图标背景样式类
-  avatar?: string | null // 头像图片（base64 Data URL），优先级高于 icon
-}>()
+import { IS_ELECTRON } from '@/utils/platform'
+
+const props = withDefaults(
+  defineProps<{
+    title: string
+    description?: string
+    icon?: string // fallback 图标
+    iconClass?: string // 图标背景样式类
+    avatar?: string | null // 头像图片（base64 Data URL），优先级高于 icon
+    size?: 'default' | 'compact' // 紧凑模式用于需要更小头部高度的页面
+    bordered?: boolean
+  }>(),
+  {
+    size: 'default',
+    bordered: true,
+  }
+)
 </script>
 
 <template>
-  <div class="relative border-b border-gray-200/50 px-6 pb-2 dark:border-gray-800/50">
+  <div
+    class="relative px-6"
+    :class="[
+      props.bordered ? 'border-b border-gray-200/50 dark:border-gray-800/50' : '',
+      props.size === 'compact' ? 'pb-1.5' : 'pb-2',
+    ]"
+  >
     <!-- 拖拽区域 - 覆盖顶部安全区域（平台自适应）
          macOS: 16px padding + 16px = 32px | Windows/Linux: 32px padding + 16px = 48px -->
-    <div class="titlebar-drag-cover" />
+    <div v-if="IS_ELECTRON" class="titlebar-drag-cover" />
 
     <!-- 标题区域 -->
     <div class="flex items-center justify-between">
-      <div class="flex items-center gap-3">
+      <div class="flex items-center" :class="props.size === 'compact' ? 'gap-2.5' : 'gap-3'">
         <!-- 头像图片（优先显示） -->
-        <img v-if="avatar" :src="avatar" :alt="title" class="h-10 w-10 rounded-xl object-cover" />
+        <img
+          v-if="avatar"
+          :src="avatar"
+          :alt="title"
+          class="object-cover"
+          :class="props.size === 'compact' ? 'h-6 w-6 rounded-md' : 'h-10 w-10 rounded-xl'"
+        />
         <!-- 可选图标（fallback） -->
-        <div v-else-if="icon" class="flex h-10 w-10 items-center justify-center rounded-xl" :class="iconClass">
-          <UIcon :name="icon" class="h-5 w-5 text-white" />
+        <div
+          v-else-if="icon"
+          class="flex items-center justify-center"
+          :class="[iconClass, props.size === 'compact' ? 'h-6 w-6 rounded-md' : 'h-10 w-10 rounded-xl']"
+        >
+          <UIcon :name="icon" class="text-white" :class="props.size === 'compact' ? 'h-3 w-3' : 'h-5 w-5'" />
         </div>
-        <div>
-          <h1 class="text-lg font-semibold text-gray-900 dark:text-white">
+        <div class="group/title flex items-baseline gap-2">
+          <h1
+            class="font-semibold text-gray-900 dark:text-white"
+            :class="props.size === 'compact' ? 'text-base' : 'text-lg'"
+          >
             {{ title }}
           </h1>
-          <p v-if="description" class="text-xs text-gray-500 dark:text-gray-400">
+          <p
+            v-if="description"
+            class="pointer-events-none whitespace-nowrap text-gray-500 opacity-0 transition-opacity duration-200 group-hover/title:opacity-100 dark:text-gray-400"
+            :class="props.size === 'compact' ? 'text-[11px]' : 'text-xs'"
+          >
             {{ description }}
           </p>
         </div>
@@ -42,7 +75,7 @@ defineProps<{
       <div class="flex-1 self-stretch mx-4" style="-webkit-app-region: drag" />
 
       <!-- 右侧操作区域 -->
-      <div class="flex items-center gap-2">
+      <div class="header-actions relative z-[40] flex items-center gap-2">
         <slot name="actions" />
       </div>
     </div>
@@ -58,9 +91,22 @@ defineProps<{
   position: absolute;
   left: 0;
   right: 0;
-  z-index: 50;
+  z-index: 30;
   top: calc(-1 * var(--titlebar-area-height));
   height: calc(var(--titlebar-area-height) + 1rem);
   -webkit-app-region: drag;
+}
+
+.header-actions {
+  -webkit-app-region: drag;
+}
+
+.header-actions :deep(button),
+.header-actions :deep(button *),
+.header-actions :deep(a),
+.header-actions :deep(a *),
+.header-actions :deep([role='button']),
+.header-actions :deep([role='button'] *) {
+  -webkit-app-region: no-drag;
 }
 </style>

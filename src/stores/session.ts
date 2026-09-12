@@ -1,6 +1,20 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { AnalysisSession, ImportProgress } from '@/types/base'
+import type { AnalysisSession, ImportProgress, ChatType } from '@/types/base'
+import { useDataService, useImportService, usePlatformService } from '@/services'
+import type { AutoImportCreateReason, AutoImportMatchMethod, AutoImportMode, ImportDiagnosticsInfo } from '@/services'
+import { IS_ELECTRON } from '@/utils/platform'
+
+/** 侧边栏筛选类型 */
+export type SessionFilterType = 'all' | ChatType
+
+/** 侧边栏排序字段 */
+export type SessionSortField = 'importedAt' | 'lastMessageTs' | 'messageCount'
+
+/** 排序方向 */
+export type SessionSortOrder = 'asc' | 'desc'
+
+export type SessionLoadState = 'idle' | 'loading' | 'ready' | 'error'
 
 /** 迁移信息 */
 export interface MigrationInfo {
@@ -29,8 +43,12 @@ export interface BatchFileInfo {
   status: BatchFileStatus
   progress?: ImportProgress
   error?: string
-  diagnosisSuggestion?: string
   sessionId?: string
+  importMode?: AutoImportMode
+  matchedBy?: AutoImportMatchMethod
+  createReason?: AutoImportCreateReason
+  newMessageCount?: number
+  duplicateCount?: number
 }
 
 /** 批量导入结果 */
@@ -70,6 +88,8 @@ export interface MergeImportResult {
   error?: string
 }
 
+import { getSessionGapThreshold } from '@/composables/useUiConfig'
+
 /**
  * 会话与导入相关的全局状态
  */
@@ -85,6 +105,10 @@ export const useSessionStore = defineStore(
     const importProgress = ref<ImportProgress | null>(null)
     // 是否初始化完成
     const isInitialized = ref(false)
+    const loadState = ref<SessionLoadState>('idle')
+    const loadError = ref<string | null>(null)
+    let sessionLoadPromise: Promise<void> | null = null
+    let sessionRefreshQueued = false
 
     // 批量导入状态
     const isBatchImporting = ref(false)
@@ -115,6 +139,7 @@ export const useSessionStore = defineStore(
      * 检查是否需要数据库迁移
      */
     async function checkMigration(): Promise<MigrationCheckResult> {
+      if (!IS_ELECTRON) return { needsMigration: false, count: 0, currentVersion: 0, pendingMigrations: [] }
       try {
         const result = await window.chatApi.checkMigration()
         migrationNeeded.value = result.needsMigration
@@ -150,17 +175,61 @@ export const useSessionStore = defineStore(
     /**
      * 从数据库加载会话列表
      */
-    async function loadSessions() {
+    async function requestSessionCatalog(): Promise<void> {
+      loadState.value = 'loading'
+      loadError.value = null
       try {
-        const list = await window.chatApi.getSessions()
+        const list = await useDataService().getSessions()
         sessions.value = list
         // 如果当前选中的会话不存在了，清除选中状态
         if (currentSessionId.value && !list.find((s) => s.id === currentSessionId.value)) {
           currentSessionId.value = null
         }
         isInitialized.value = true
+        loadState.value = 'ready'
+      } catch (error) {
+        loadState.value = 'error'
+        loadError.value = error instanceof Error ? error.message : String(error)
+        throw error
+      }
+    }
+
+    async function drainSessionRefreshQueue(): Promise<void> {
+      let finalError: unknown = null
+      let finalRequestFailed = false
+
+      do {
+        // 活动请求期间的多次刷新只合并为一次后续请求，避免旧快照吞掉数据变更后的刷新。
+        sessionRefreshQueued = false
+        try {
+          await requestSessionCatalog()
+          finalError = null
+          finalRequestFailed = false
+        } catch (error) {
+          finalError = error
+          finalRequestFailed = true
+        }
+      } while (sessionRefreshQueued)
+
+      sessionLoadPromise = null
+      if (finalRequestFailed) throw finalError
+    }
+
+    async function loadSessions(options: { throwOnError?: boolean } = {}) {
+      if (sessionLoadPromise) {
+        sessionRefreshQueued = true
+      } else {
+        sessionLoadPromise = drainSessionRefreshQueue()
+      }
+
+      try {
+        await sessionLoadPromise
       } catch (error) {
         console.error('加载会话列表失败:', error)
+        if (options.throwOnError) {
+          isInitialized.value = false
+          throw error
+        }
         isInitialized.value = true
       }
     }
@@ -171,41 +240,26 @@ export const useSessionStore = defineStore(
     async function importFile(): Promise<{
       success: boolean
       error?: string
-      diagnosisSuggestion?: string
+      importMode?: AutoImportMode
+      matchedBy?: AutoImportMatchMethod
+      createReason?: AutoImportCreateReason
+      newMessageCount?: number
+      duplicateCount?: number
     }> {
       try {
-        const result = await window.chatApi.selectFile()
-        // 用户取消选择
-        if (!result) {
+        const dialogResult = await usePlatformService().showOpenDialog({
+          properties: ['openFile'],
+          filters: [
+            { name: 'Chat Files', extensions: ['json', 'jsonl', 'txt'] },
+            { name: 'All Files', extensions: ['*'] },
+          ],
+        })
+        if (dialogResult.canceled || dialogResult.filePaths.length === 0) {
           return { success: false, error: 'error.no_file_selected' }
         }
-        // 有错误（如格式不识别）- 优先检查错误，因为此时可能没有 filePath
-        if (result.error) {
-          const diagnosisSuggestion = result.diagnosis?.suggestion
-          return { success: false, error: result.error, diagnosisSuggestion }
-        }
-        // 没有文件路径（用户取消）
-        if (!result.filePath) {
-          return { success: false, error: 'error.no_file_selected' }
-        }
-        return await importFileFromPath(result.filePath)
+        return await importFileFromPath(dialogResult.filePaths[0])
       } catch (error) {
         return { success: false, error: String(error) }
-      }
-    }
-
-    /** 导入诊断信息类型 */
-    interface ImportDiagnosticsInfo {
-      logFile: string | null
-      detectedFormat: string | null
-      messagesReceived: number
-      messagesWritten: number
-      messagesSkipped: number
-      skipReasons: {
-        noSenderId: number
-        noAccountName: number
-        invalidTimestamp: number
-        noType: number
       }
     }
 
@@ -215,27 +269,27 @@ export const useSessionStore = defineStore(
     async function importFileFromPath(filePath: string): Promise<{
       success: boolean
       error?: string
-      diagnosisSuggestion?: string
       diagnostics?: ImportDiagnosticsInfo
+      importMode?: AutoImportMode
+      matchedBy?: AutoImportMatchMethod
+      createReason?: AutoImportCreateReason
+      newMessageCount?: number
+      duplicateCount?: number
     }> {
       try {
         isImporting.value = true
         importProgress.value = {
           stage: 'detecting',
           progress: 0,
-          message: '', // Progress text is handled by frontend i18n
+          message: '',
         }
 
-        // 进度队列控制
         const queue: ImportProgress[] = []
         let isProcessing = false
         let currentStage = 'reading'
         let lastStageTime = Date.now()
         const MIN_STAGE_TIME = 1000
 
-        /**
-         * 处理导入进度队列，确保阶段展示足够时间
-         */
         const processQueue = async () => {
           if (isProcessing) return
           isProcessing = true
@@ -257,14 +311,15 @@ export const useSessionStore = defineStore(
           isProcessing = false
         }
 
-        const unsubscribe = window.chatApi.onImportProgress((progress) => {
-          if (progress.stage === 'done') return
-          queue.push(progress)
-          processQueue()
-        })
-
-        const importResult = await window.chatApi.import(filePath)
-        unsubscribe()
+        const importResult = await useImportService().importFile(
+          filePath,
+          { sessionGapThreshold: getSessionGapThreshold() },
+          (progress) => {
+            if (progress.stage === 'done') return
+            queue.push(progress)
+            processQueue()
+          }
+        )
 
         while (queue.length > 0 || isProcessing) {
           await new Promise((resolve) => setTimeout(resolve, 100))
@@ -284,24 +339,21 @@ export const useSessionStore = defineStore(
           await loadSessions()
           currentSessionId.value = importResult.sessionId
 
-          // 自动生成会话索引
-          try {
-            const savedThreshold = localStorage.getItem('sessionGapThreshold')
-            const gapThreshold = savedThreshold ? parseInt(savedThreshold, 10) : 1800 // 默认30分钟
-            await window.sessionApi.generate(importResult.sessionId, gapThreshold)
-          } catch (error) {
-            console.error('自动生成会话索引失败:', error)
-            // 不阻断导入流程，用户可以手动生成
-          }
+          await applyOwnerProfileAfterImport(importResult.sessionId)
 
-          return { success: true, diagnostics: importResult.diagnostics }
+          return {
+            success: true,
+            diagnostics: importResult.diagnostics,
+            importMode: importResult.importMode,
+            matchedBy: importResult.matchedBy,
+            createReason: importResult.createReason,
+            newMessageCount: importResult.newMessageCount,
+            duplicateCount: importResult.duplicateCount,
+          }
         } else {
-          // 传递诊断信息（如果有）
-          const diagnosisSuggestion = importResult.diagnosis?.suggestion
           return {
             success: false,
             error: importResult.error || 'error.import_failed',
-            diagnosisSuggestion,
             diagnostics: importResult.diagnostics,
           }
         }
@@ -318,10 +370,26 @@ export const useSessionStore = defineStore(
     /**
      * 批量导入多个文件（串行执行）
      */
-    async function importFilesFromPaths(filePaths: string[]): Promise<BatchImportResult> {
-      if (filePaths.length === 0) {
+    async function importFiles(sources: Array<File | string>): Promise<BatchImportResult> {
+      if (sources.length === 0) {
         return { total: 0, success: 0, failed: 0, cancelled: 0, files: [] }
       }
+
+      const importSources = sources.map((source) => {
+        if (typeof source === 'string') {
+          return {
+            source,
+            path: source,
+            name: source.split('/').pop() || source.split('\\').pop() || source,
+          }
+        }
+
+        return {
+          source,
+          path: source.webkitRelativePath || source.name,
+          name: source.name,
+        }
+      })
 
       // 初始化批量导入状态
       isBatchImporting.value = true
@@ -329,11 +397,71 @@ export const useSessionStore = defineStore(
       batchImportResult.value = null
 
       // 初始化文件列表
-      batchFiles.value = filePaths.map((path) => ({
+      batchFiles.value = importSources.map(({ path, name }) => ({
         path,
-        name: path.split('/').pop() || path.split('\\').pop() || path,
+        name,
         status: 'pending' as BatchFileStatus,
       }))
+
+      const importService = useImportService()
+      if (importService.importBatch) {
+        const results = await importService.importBatch(
+          importSources.map(({ source }, index) => ({ id: String(index), file: source })),
+          { sessionGapThreshold: getSessionGapThreshold() },
+          ({ index, event, progress, result }) => {
+            const file = batchFiles.value[index]
+            if (!file) return
+            if (event === 'start') file.status = 'importing'
+            if (progress) file.progress = progress
+            if (event === 'complete' && result) {
+              file.status = result.status
+              if (result.status === 'success') {
+                file.sessionId = result.result.sessionId
+                file.importMode = result.result.importMode
+                file.matchedBy = result.result.matchedBy
+                file.createReason = result.result.createReason
+                file.newMessageCount = result.result.newMessageCount
+                file.duplicateCount = result.result.duplicateCount
+              } else if (result.status === 'failed') {
+                file.error = result.error
+              }
+            }
+          }
+        )
+
+        for (let index = 0; index < results.length; index++) {
+          const result = results[index]
+          const file = batchFiles.value[index]
+          file.status = result.status
+          if (result.status === 'success') {
+            file.sessionId = result.result.sessionId
+            file.importMode = result.result.importMode
+            file.matchedBy = result.result.matchedBy
+            file.createReason = result.result.createReason
+            file.newMessageCount = result.result.newMessageCount
+            file.duplicateCount = result.result.duplicateCount
+          } else if (result.status === 'failed') {
+            file.error = result.error
+          }
+        }
+
+        const successfulSessionIds = results.flatMap((result) =>
+          result.status === 'success' && result.result.sessionId ? [result.result.sessionId] : []
+        )
+        for (const sessionId of successfulSessionIds) await applyOwnerProfileAfterImport(sessionId)
+        await loadSessions()
+
+        const result: BatchImportResult = {
+          total: sources.length,
+          success: results.filter((item) => item.status === 'success').length,
+          failed: results.filter((item) => item.status === 'failed').length,
+          cancelled: results.filter((item) => item.status === 'cancelled').length,
+          files: [...batchFiles.value],
+        }
+        batchImportResult.value = result
+        isBatchImporting.value = false
+        return result
+      }
 
       let successCount = 0
       let failedCount = 0
@@ -400,14 +528,15 @@ export const useSessionStore = defineStore(
             isProcessing = false
           }
 
-          const unsubscribe = window.chatApi.onImportProgress((progress) => {
-            if (progress.stage === 'done') return
-            queue.push(progress)
-            processQueue()
-          })
-
-          const importResult = await window.chatApi.import(file.path)
-          unsubscribe()
+          const importResult = await useImportService().importFile(
+            importSources[i].source,
+            { sessionGapThreshold: getSessionGapThreshold() },
+            (progress) => {
+              if (progress.stage === 'done') return
+              queue.push(progress)
+              processQueue()
+            }
+          )
 
           // 等待进度队列处理完成（但如果已取消则快速跳过）
           let waitCount = 0
@@ -422,16 +551,14 @@ export const useSessionStore = defineStore(
             if (importResult.success && importResult.sessionId) {
               file.status = 'success'
               file.sessionId = importResult.sessionId
+              file.importMode = importResult.importMode
+              file.matchedBy = importResult.matchedBy
+              file.createReason = importResult.createReason
+              file.newMessageCount = importResult.newMessageCount
+              file.duplicateCount = importResult.duplicateCount
               successCount++
 
-              // 即使取消了也要为已导入成功的文件生成会话索引
-              try {
-                const savedThreshold = localStorage.getItem('sessionGapThreshold')
-                const gapThreshold = savedThreshold ? parseInt(savedThreshold, 10) : 1800
-                await window.sessionApi.generate(importResult.sessionId, gapThreshold)
-              } catch (error) {
-                console.error('自动生成会话索引失败:', error)
-              }
+              await applyOwnerProfileAfterImport(importResult.sessionId)
             } else {
               file.status = 'failed'
               file.error = importResult.error || 'error.import_failed'
@@ -445,22 +572,17 @@ export const useSessionStore = defineStore(
           if (importResult.success && importResult.sessionId) {
             file.status = 'success'
             file.sessionId = importResult.sessionId
+            file.importMode = importResult.importMode
+            file.matchedBy = importResult.matchedBy
+            file.createReason = importResult.createReason
+            file.newMessageCount = importResult.newMessageCount
+            file.duplicateCount = importResult.duplicateCount
             successCount++
 
-            // 自动生成会话索引（跳过如果已取消）
-            if (!batchImportCancelled.value) {
-              try {
-                const savedThreshold = localStorage.getItem('sessionGapThreshold')
-                const gapThreshold = savedThreshold ? parseInt(savedThreshold, 10) : 1800
-                await window.sessionApi.generate(importResult.sessionId, gapThreshold)
-              } catch (error) {
-                console.error('自动生成会话索引失败:', error)
-              }
-            }
+            await applyOwnerProfileAfterImport(importResult.sessionId)
           } else {
             file.status = 'failed'
             file.error = importResult.error || 'error.import_failed'
-            file.diagnosisSuggestion = importResult.diagnosis?.suggestion
             failedCount++
           }
         } catch (error) {
@@ -475,7 +597,7 @@ export const useSessionStore = defineStore(
 
       // 生成结果
       const result: BatchImportResult = {
-        total: filePaths.length,
+        total: sources.length,
         success: successCount,
         failed: failedCount,
         cancelled: cancelledCount,
@@ -493,6 +615,7 @@ export const useSessionStore = defineStore(
      */
     function cancelBatchImport() {
       batchImportCancelled.value = true
+      useImportService().cancelActiveImport?.()
     }
 
     /**
@@ -572,6 +695,7 @@ export const useSessionStore = defineStore(
           outputName,
           conflictResolutions: [], // 默认 keepBoth（保留所有消息）
           andAnalyze: true, // 合并后创建会话
+          sessionGapThreshold: getSessionGapThreshold(),
         })
 
         if (!result.success) {
@@ -592,17 +716,6 @@ export const useSessionStore = defineStore(
 
         // 刷新会话列表
         await loadSessions()
-
-        // 自动生成会话索引
-        if (result.sessionId) {
-          try {
-            const savedThreshold = localStorage.getItem('sessionGapThreshold')
-            const gapThreshold = savedThreshold ? parseInt(savedThreshold, 10) : 1800
-            await window.sessionApi.generate(result.sessionId, gapThreshold)
-          } catch (error) {
-            console.error('自动生成会话索引失败:', error)
-          }
-        }
 
         return { success: true, sessionId: result.sessionId }
       } catch (err) {
@@ -638,7 +751,7 @@ export const useSessionStore = defineStore(
      */
     async function deleteSession(id: string): Promise<boolean> {
       try {
-        const success = await window.chatApi.deleteSession(id)
+        const success = await useDataService().deleteSession(id)
         if (success) {
           const index = sessions.value.findIndex((s) => s.id === id)
           if (index !== -1) {
@@ -661,7 +774,7 @@ export const useSessionStore = defineStore(
      */
     async function renameSession(id: string, newName: string): Promise<boolean> {
       try {
-        const success = await window.chatApi.renameSession(id, newName)
+        const success = await useDataService().renameSession(id, newName)
         if (success) {
           const session = sessions.value.find((s) => s.id === id)
           if (session) {
@@ -687,11 +800,14 @@ export const useSessionStore = defineStore(
      */
     async function updateSessionOwnerId(id: string, ownerId: string | null): Promise<boolean> {
       try {
-        const success = await window.chatApi.updateSessionOwnerId(id, ownerId)
+        const success = await useDataService().updateSessionOwnerId(id, ownerId)
         if (success) {
           const session = sessions.value.find((s) => s.id === id)
           if (session) {
             session.ownerId = ownerId
+            session.ownerName = null
+            session.ownerStatus = ownerId ? 'unresolved' : 'missing'
+            if (ownerId) session.ownerExcluded = false
           }
         }
         return success
@@ -701,15 +817,85 @@ export const useSessionStore = defineStore(
       }
     }
 
+    /**
+     * 手动选择"我是谁"：写入当前会话 owner，更新平台 owner profile，
+     * 并批量应用到同平台其他未设置 owner 的会话
+     */
+    async function setOwnerAndApplyProfile(id: string, ownerPlatformId: string) {
+      const result = await useDataService().setOwnerAndApplyProfile(id, ownerPlatformId)
+      for (const sessionId of [id, ...result.updatedSessionIds]) {
+        const session = sessions.value.find((s) => s.id === sessionId)
+        if (session) {
+          session.ownerId = result.updatedSessionOwnerIds[sessionId] ?? result.ownerId
+          session.ownerName = session.ownerId
+          session.ownerStatus = 'resolved'
+          session.ownerExcluded = false
+        }
+      }
+      return result
+    }
+
+    /**
+     * 尝试用已保存的平台 owner profile 自动补全会话 owner（唯一匹配才写入）
+     */
+    async function tryApplyOwnerProfile(id: string) {
+      const result = await useDataService().tryApplyOwnerProfile(id)
+      if (result.applied && result.ownerId) {
+        const session = sessions.value.find((s) => s.id === id)
+        if (session) {
+          session.ownerId = result.ownerId
+          session.ownerName = result.ownerId
+          session.ownerStatus = 'resolved'
+          session.ownerExcluded = false
+        }
+      }
+      return result
+    }
+
+    /**
+     * 用户确认当前对话中没有自己：排除个人统计与自动 owner 补全
+     */
+    async function excludeOwnerSession(id: string): Promise<boolean> {
+      const success = await useDataService().excludeOwnerSession(id)
+      if (success) {
+        const session = sessions.value.find((item) => item.id === id)
+        if (session) session.ownerExcluded = true
+      }
+      return success
+    }
+
+    /**
+     * 导入成功后静默尝试应用平台 owner profile（失败不影响导入流程）
+     */
+    async function applyOwnerProfileAfterImport(id: string): Promise<void> {
+      try {
+        await tryApplyOwnerProfile(id)
+      } catch (error) {
+        console.warn('导入后应用 owner profile 失败:', error)
+      }
+    }
+
     // 置顶会话 ID 列表
     const pinnedSessionIds = ref<string[]>([])
 
-    // 排序后的会话列表
-    const sortedSessions = computed(() => {
-      // 建立索引映射，index 越大表示越晚置顶
-      const pinIndexMap = new Map(pinnedSessionIds.value.map((id, index) => [id, index]))
+    // 侧边栏筛选/排序状态
+    const filterType = ref<SessionFilterType>('all')
+    const sortField = ref<SessionSortField>('importedAt')
+    const sortOrder = ref<SessionSortOrder>('desc')
 
-      return [...sessions.value].sort((a, b) => {
+    // 排序后的会话列表（含筛选 + 排序 + 置顶）
+    const sortedSessions = computed(() => {
+      // 1. 筛选
+      let filtered = sessions.value
+      if (filterType.value !== 'all') {
+        filtered = filtered.filter((s) => s.type === filterType.value)
+      }
+
+      // 2. 建立置顶索引映射
+      const pinIndexMap = new Map(pinnedSessionIds.value.map((id, index) => [id, index]))
+      const dir = sortOrder.value === 'desc' ? -1 : 1
+
+      return [...filtered].sort((a, b) => {
         const aPinIndex = pinIndexMap.get(a.id)
         const bPinIndex = pinIndexMap.get(b.id)
         const aPinned = aPinIndex !== undefined
@@ -723,7 +909,11 @@ export const useSessionStore = defineStore(
         if (aPinned && !bPinned) return -1
         if (!aPinned && bPinned) return 1
 
-        // 都不置顶：保持原顺序（通常是按时间倒序）
+        // 都不置顶：按用户选择的字段排序
+        const field = sortField.value
+        const aVal = a[field] ?? 0
+        const bVal = b[field] ?? 0
+        if (aVal !== bVal) return (aVal - bVal) * dir
         return 0
       })
     })
@@ -751,10 +941,15 @@ export const useSessionStore = defineStore(
       sessions,
       sortedSessions,
       pinnedSessionIds,
+      filterType,
+      sortField,
+      sortOrder,
       currentSessionId,
       isImporting,
       importProgress,
       isInitialized,
+      loadState,
+      loadError,
       currentSession,
       // 迁移相关
       migrationNeeded,
@@ -772,6 +967,9 @@ export const useSessionStore = defineStore(
       renameSession,
       clearSelection,
       updateSessionOwnerId,
+      setOwnerAndApplyProfile,
+      tryApplyOwnerProfile,
+      excludeOwnerSession,
       togglePinSession,
       isPinned,
       // 批量导入
@@ -779,7 +977,7 @@ export const useSessionStore = defineStore(
       batchFiles,
       batchImportCancelled,
       batchImportResult,
-      importFilesFromPaths,
+      importFiles,
       cancelBatchImport,
       clearBatchImportResult,
       // 合并导入
@@ -799,9 +997,12 @@ export const useSessionStore = defineStore(
         storage: sessionStorage,
       },
       {
-        pick: ['pinnedSessionIds'],
+        pick: ['filterType', 'sortField', 'sortOrder'],
         storage: localStorage,
       },
     ],
+    backendPersist: {
+      pick: ['pinnedSessionIds'],
+    },
   }
 )

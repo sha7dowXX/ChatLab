@@ -1,25 +1,25 @@
 <script setup lang="ts">
-import { ref, computed, defineAsyncComponent } from 'vue'
+import { ref, computed, defineAsyncComponent, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import CaptureButton from '@/components/common/CaptureButton.vue'
-import TimeSelect from '@/components/common/TimeSelect.vue'
-import AITab from '@/components/analysis/AITab.vue'
+import MoreTab from '@/components/analysis/MoreTab.vue'
+import MemoryTab from '@/components/analysis/MemoryTab.vue'
 import { ChatExplorer } from '@/components/AIChat'
-import OverviewTab from './components/OverviewTab.vue'
-import ViewTab from './components/ViewTab.vue'
-import QuotesTab from './components/QuotesTab.vue'
-import MemberManagementPanel from './components/MemberTab.vue'
-import PageHeader from '@/components/layout/PageHeader.vue'
-import SessionIndexModal from '@/components/analysis/SessionIndexModal.vue'
+import PrivateChatInsights from './components/insights/PrivateChatInsights.vue'
+import MemberList from '@/components/common/member/MemberList.vue'
+import SessionAnalysisHeader from '@/components/layout/session/SessionAnalysisHeader.vue'
+import SemanticIndexSessionModal from '@/components/analysis/SemanticIndexSessionModal.vue'
+import OwnerPromptModal from '@/components/analysis/member/OwnerPromptModal.vue'
 import IncrementalImportModal from '@/components/analysis/IncrementalImportModal.vue'
 const MessageExportModal = defineAsyncComponent(() => import('@/components/MessageExport/MessageExportModal.vue'))
-import LoadingState from '@/components/UI/LoadingState.vue'
+import ActionToolsPanel from '@/components/layout/ActionToolsPanel.vue'
+import { LoadingDots, LoadingState } from '@/components/UI'
 import { useSessionStore } from '@/stores/session'
 import { useLayoutStore } from '@/stores/layout'
 import { useSettingsStore } from '@/stores/settings'
-import { useSessionAnalysisPageBase, useSessionHeaderDescription } from '@/composables'
+import { useSessionAnalysisPageBase } from '@/composables'
+import { useInsightTabAnalytics } from '@/composables/useInsightTabAnalytics'
 
 const { t } = useI18n()
 
@@ -30,8 +30,10 @@ const layoutStore = useLayoutStore()
 const settingsStore = useSettingsStore()
 const { currentSessionId } = storeToRefs(sessionStore)
 
-// 会话索引弹窗状态
-const showSessionIndexModal = ref(false)
+const showSemanticIndexModal = ref(false)
+
+// "我是谁"提示弹窗状态
+const showOwnerPromptModal = ref(false)
 
 // 增量导入弹窗状态
 const showIncrementalImportModal = ref(false)
@@ -47,19 +49,19 @@ function openChatRecordViewer() {
   layoutStore.openChatRecordDrawer({})
 }
 
-// Tab 配置 - 私聊包含总览、视图、语录、AI 对话和实验室
+// Tab 配置 - 私聊包含洞察、AI 对话、记忆和更多工具
 const tabs = [
-  { id: 'overview', labelKey: 'analysis.tabs.overview', icon: 'i-heroicons-chart-pie' },
-  { id: 'view', labelKey: 'analysis.tabs.view', icon: 'i-heroicons-presentation-chart-bar' },
-  { id: 'quotes', labelKey: 'analysis.tabs.quotes', icon: 'i-heroicons-chat-bubble-left-right' },
+  { id: 'insights', labelKey: 'analysis.tabs.insights', icon: 'i-heroicons-presentation-chart-bar' },
   { id: 'ai-chat', labelKey: 'analysis.tabs.aiChat', icon: 'i-heroicons-chat-bubble-left-ellipsis' },
-  { id: 'lab', labelKey: 'analysis.tabs.lab', icon: 'i-heroicons-beaker' },
+  { id: 'memory', labelKey: 'analysis.tabs.memory', icon: 'i-heroicons-light-bulb' },
+  { id: 'more', labelKey: 'analysis.tabs.more', icon: 'i-heroicons-squares-2x2' },
 ]
 
 const {
   activeTab,
   isLoading,
   isInitialLoad,
+  isSessionSwitching,
   session,
   memberActivity,
   hourlyActivity,
@@ -68,9 +70,9 @@ const {
   timeRangeValue,
   fullTimeRange,
   timeFilter,
-  selectedYearForOverview,
   initialTimeState,
-  loadAnalysisData,
+  invalidateAnalysisData,
+  handleTimeRangeInitialized,
 } = useSessionAnalysisPageBase({
   route,
   router,
@@ -78,6 +80,15 @@ const {
   selectSession: sessionStore.selectSession,
   defaultTab: settingsStore.defaultSessionTab,
   validTabIds: tabs.map((tab) => tab.id),
+})
+
+provide('session-switch-loading', isSessionSwitching)
+
+const trackInsightTab = useInsightTabAnalytics({
+  chatType: 'private',
+  isActive: () => activeTab.value === 'insights' && !isSessionSwitching.value,
+  sessionId: currentSessionId,
+  routePath: () => route.path,
 })
 
 // 当前筛选后的消息总数
@@ -90,16 +101,11 @@ const filteredMemberCount = computed(() => {
   return memberActivity.value.filter((m) => m.messageCount > 0).length
 })
 
-const { headerDescription } = useSessionHeaderDescription({
-  session,
-  fullTimeRange,
-  timeRangeValue,
-  descriptionKey: 'analysis.privateChat.description',
-})
-
 // 获取对方头像
 const otherMemberAvatar = computed(() => {
-  if (!session.value || memberActivity.value.length === 0) return null
+  if (!session.value) return null
+  if (session.value.memberAvatar) return session.value.memberAvatar
+  if (memberActivity.value.length === 0) return null
 
   // 1. 优先尝试排除 ownerId
   if (session.value.ownerId) {
@@ -123,97 +129,59 @@ const otherMemberAvatar = computed(() => {
 </script>
 
 <template>
-  <div class="flex h-full flex-col bg-white dark:bg-gray-900" style="padding-top: var(--titlebar-area-height)">
-    <!-- Loading State -->
-    <LoadingState v-if="isInitialLoad" variant="page" :text="t('analysis.privateChat.loading')" />
+  <div class="relative flex h-full flex-col dark:bg-page-dark" style="padding-top: var(--titlebar-area-height)">
+    <div
+      v-if="isSessionSwitching"
+      data-testid="private-chat-switch-loading"
+      class="absolute inset-0 z-20 flex cursor-wait items-center justify-center bg-page-bg dark:bg-page-dark"
+      :style="{ paddingTop: 'var(--titlebar-area-height)' }"
+      role="status"
+      aria-live="polite"
+      :aria-label="t('common.loading')"
+    >
+      <LoadingDots />
+    </div>
 
     <!-- Content -->
-    <template v-else-if="session">
-      <!-- Header -->
-      <PageHeader
+    <template v-if="session">
+      <SessionAnalysisHeader
+        v-model:active-tab="activeTab"
+        v-model:time-range-value="timeRangeValue"
         :title="session.name"
-        :description="headerDescription"
         :avatar="otherMemberAvatar"
         icon="i-heroicons-user"
         icon-class="bg-pink-600 text-white dark:bg-pink-500 dark:text-white"
-      >
-        <template #actions>
-          <UButton
-            color="primary"
-            variant="soft"
-            size="sm"
-            icon="i-heroicons-chat-bubble-bottom-center-text"
-            @click="openChatRecordViewer"
-          >
-            {{ t('analysis.tooltip.chatViewer') }}
-          </UButton>
-          <CaptureButton />
-        </template>
-        <!-- Tabs -->
-        <div class="mt-4 flex items-center justify-between gap-3">
-          <div class="flex shrink-0 items-center gap-0.5 overflow-x-auto scrollbar-hide">
-            <button
-              v-for="tab in tabs"
-              :key="tab.id"
-              class="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium transition-all"
-              :class="[
-                activeTab === tab.id
-                  ? 'bg-pink-500 text-white dark:bg-pink-900/30 dark:text-pink-300'
-                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800',
-              ]"
-              @click="activeTab = tab.id"
-            >
-              <UIcon :name="tab.icon" class="h-4 w-4" />
-              <span class="whitespace-nowrap">{{ t(tab.labelKey) }}</span>
-            </button>
-          </div>
-          <!-- AI 对话和实验室都不使用这里的时间范围筛选，因此在这些一级 Tab 下隐藏。 -->
-          <TimeSelect
-            v-model="timeRangeValue"
-            :session-id="currentSessionId ?? undefined"
-            :visible="activeTab !== 'ai-chat' && activeTab !== 'lab'"
-            :initial-state="initialTimeState"
-            @update:full-range="fullTimeRange = $event"
-          />
-        </div>
-      </PageHeader>
+        :tabs="tabs"
+        :current-session-id="currentSessionId"
+        :initial-time-state="initialTimeState"
+        @open-incremental-import="showIncrementalImportModal = true"
+        @open-member-management="showMemberManagementModal = true"
+        @open-chat-record="openChatRecordViewer"
+        @update:full-range="fullTimeRange = $event"
+        @time-range-initialized="handleTimeRangeInitialized"
+      />
 
       <!-- Tab Content -->
       <div class="relative flex-1 overflow-y-auto">
         <!-- Loading Overlay -->
-        <LoadingState v-if="isLoading" variant="overlay" />
+        <LoadingState v-if="isLoading && !isSessionSwitching" variant="overlay" :text="t('common.loading')" />
 
         <div class="h-full">
           <Transition name="tab-slide" mode="out-in">
-            <OverviewTab
-              v-if="activeTab === 'overview'"
-              :key="'overview-' + currentSessionId"
+            <PrivateChatInsights
+              v-if="activeTab === 'insights'"
+              :key="'insights-' + currentSessionId"
+              :session-id="currentSessionId!"
               :session="session"
               :member-activity="memberActivity"
               :message-types="messageTypes"
               :hourly-activity="hourlyActivity"
               :daily-activity="dailyActivity"
               :time-range="fullTimeRange"
-              :selected-year="selectedYearForOverview"
               :filtered-message-count="filteredMessageCount"
               :filtered-member-count="filteredMemberCount"
               :time-filter="timeFilter"
-              @open-session-index="showSessionIndexModal = true"
-              @open-incremental-import="showIncrementalImportModal = true"
-              @open-member-management="showMemberManagementModal = true"
-              @open-message-export="showMessageExportModal = true"
-            />
-            <ViewTab
-              v-else-if="activeTab === 'view'"
-              :key="'view-' + currentSessionId"
-              :session-id="currentSessionId!"
-              :time-filter="timeFilter"
-            />
-            <QuotesTab
-              v-else-if="activeTab === 'quotes'"
-              :key="'quotes-' + currentSessionId"
-              :session-id="currentSessionId!"
-              :time-filter="timeFilter"
+              @select-tab="trackInsightTab"
             />
             <ChatExplorer
               v-else-if="activeTab === 'ai-chat'"
@@ -222,26 +190,52 @@ const otherMemberAvatar = computed(() => {
               :session-name="session.name"
               chat-type="private"
             />
-            <AITab
-              v-else-if="activeTab === 'lab'"
-              :key="'lab-' + currentSessionId"
+            <MemoryTab
+              v-else-if="activeTab === 'memory'"
+              :key="'memory-' + currentSessionId"
               :session-id="currentSessionId!"
               :session-name="session.name"
+            />
+            <MoreTab
+              v-else-if="activeTab === 'more'"
+              :key="'more-' + currentSessionId"
+              :session-id="currentSessionId!"
               chat-type="private"
-              mode="sql-only"
             />
           </Transition>
         </div>
       </div>
+
+      <ActionToolsPanel
+        @open-incremental-import="showIncrementalImportModal = true"
+        @open-semantic-index="showSemanticIndexModal = true"
+        @open-member-management="showMemberManagementModal = true"
+        @open-chat-record="openChatRecordViewer"
+        @open-message-export="showMessageExportModal = true"
+      />
     </template>
 
     <!-- Empty State -->
-    <div v-else class="flex h-full items-center justify-center">
+    <div v-else-if="!isInitialLoad" class="flex h-full items-center justify-center">
       <p class="text-gray-500">{{ t('analysis.privateChat.loadError') }}</p>
     </div>
 
-    <!-- 会话索引弹窗（内部自动检测并弹出） -->
-    <SessionIndexModal v-if="currentSessionId" v-model="showSessionIndexModal" :session-id="currentSessionId" />
+    <!-- 语义索引弹窗（当前对话） -->
+    <SemanticIndexSessionModal
+      v-if="currentSessionId && session"
+      v-model="showSemanticIndexModal"
+      :session-id="currentSessionId"
+      :message-count="session.messageCount"
+    />
+
+    <!-- "我是谁"提示弹窗（内部自动检测并弹出） -->
+    <OwnerPromptModal
+      v-if="currentSessionId && session"
+      v-model="showOwnerPromptModal"
+      :session-id="currentSessionId"
+      chat-type="private"
+      auto-check
+    />
 
     <!-- 增量导入弹窗 -->
     <IncrementalImportModal
@@ -249,7 +243,12 @@ const otherMemberAvatar = computed(() => {
       v-model="showIncrementalImportModal"
       :session-id="currentSessionId"
       :session-name="session.name"
-      @imported="loadAnalysisData"
+      @imported="
+        () => {
+          invalidateAnalysisData()
+          sessionStore.loadSessions()
+        }
+      "
     />
 
     <!-- 导出聊天记录弹窗 -->
@@ -258,7 +257,7 @@ const otherMemberAvatar = computed(() => {
     <!-- 成员管理弹窗 -->
     <UModal v-if="currentSessionId" v-model:open="showMemberManagementModal" :ui="{ content: 'max-w-6xl h-[85vh]' }">
       <template #content>
-        <div class="flex h-full flex-col overflow-hidden bg-white dark:bg-gray-900">
+        <div class="flex h-full flex-col overflow-hidden bg-white dark:bg-page-dark">
           <div
             class="flex flex-none items-center justify-between border-b border-gray-200 px-5 py-3 dark:border-gray-700"
           >
@@ -272,8 +271,13 @@ const otherMemberAvatar = computed(() => {
             </div>
             <UButton variant="ghost" icon="i-heroicons-x-mark" size="sm" @click="showMemberManagementModal = false" />
           </div>
-          <div class="flex-1 overflow-auto">
-            <MemberManagementPanel :session-id="currentSessionId" :show-header="false" />
+          <div class="flex-1 overflow-hidden">
+            <MemberList
+              :session-id="currentSessionId"
+              :show-header="false"
+              chat-type="private"
+              @data-changed="invalidateAnalysisData"
+            />
           </div>
         </div>
       </template>
@@ -282,8 +286,7 @@ const otherMemberAvatar = computed(() => {
 </template>
 
 <style scoped>
-.tab-slide-enter-active,
-.tab-slide-leave-active {
+.tab-slide-enter-active {
   transition:
     opacity 0.2s ease,
     transform 0.2s ease;
@@ -292,10 +295,5 @@ const otherMemberAvatar = computed(() => {
 .tab-slide-enter-from {
   opacity: 0;
   transform: translateY(10px);
-}
-
-.tab-slide-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
 }
 </style>

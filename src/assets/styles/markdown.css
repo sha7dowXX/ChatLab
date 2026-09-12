@@ -6,8 +6,8 @@
 
 /* 段落（全局样式不使用 :deep） */
 .prose p {
-  margin: 0.5em 0;
-  line-height: 1.6;
+  margin: 12px 0;
+  line-height: inherit;
 }
 
 .prose p:first-child {
@@ -40,17 +40,26 @@
   line-height: 1.4;
 }
 
+.prose h4,
+.prose h5,
+.prose h6 {
+  margin: 16px 0;
+}
+
 .prose h1:first-child,
 .prose h2:first-child,
-.prose h3:first-child {
+.prose h3:first-child,
+.prose h4:first-child,
+.prose h5:first-child,
+.prose h6:first-child {
   margin-top: 0;
 }
 
 /* 列表 */
 .prose ul,
 .prose ol {
-  margin: 0.5em 0;
-  padding-left: 1.5em;
+  margin: 12px 0;
+  padding-left: 18px;
 }
 
 .prose ul {
@@ -62,12 +71,16 @@
 }
 
 .prose li {
-  margin: 0.25em 0;
-  line-height: 1.5;
+  margin: 0;
+  line-height: inherit;
+}
+
+.prose li + li {
+  margin-top: 4px;
 }
 
 .prose li > p {
-  margin: 0.25em 0;
+  margin: 8px 0;
 }
 
 /* 嵌套列表 */
@@ -75,7 +88,7 @@
 .prose ol ol,
 .prose ul ol,
 .prose ol ul {
-  margin: 0.25em 0;
+  margin: 4px 0;
 }
 
 /* 代码 */
@@ -93,7 +106,7 @@
 
 /* 代码块 */
 .prose pre {
-  margin: 0.75em 0;
+  margin: 12px 0;
   padding: 0.875em 1em;
   border-radius: 0.5rem;
   background-color: #f3f4f6;
@@ -121,10 +134,9 @@
 
 /* 引用块 - 使用项目主题粉色 */
 .prose blockquote {
-  margin: 0.75em 0;
-  padding: 0.5em 0 0.5em 1em;
-  border-left: 3px solid var(--color-pink-500, #ee4567);
-  background-color: color-mix(in srgb, var(--color-pink-500, #ee4567) 5%, transparent);
+  margin: 12px 0 0;
+  padding: 0 0 0 14px;
+  border-left: 2px solid var(--color-pink-500, #ee4567);
   border-radius: 0 0.25rem 0.25rem 0;
 }
 
@@ -150,7 +162,7 @@
 
 /* 分割线 */
 .prose hr {
-  margin: 1em 0;
+  margin: 20px 0;
   border: none;
   border-top: 1px solid #e5e7eb;
 }
@@ -171,7 +183,7 @@
 /* 表格 */
 .prose table {
   width: 100%;
-  margin: 0.75em 0;
+  margin: 12px 0;
   border-collapse: collapse;
   font-size: 0.875em;
 }
@@ -197,6 +209,14 @@
   background-color: #1f2937;
 }
 
+.prose > :first-child {
+  margin-top: 0;
+}
+
+.prose > :last-child {
+  margin-bottom: 0;
+}
+
 /* 用户消息中的样式调整（白色文字背景） */
 .prose-invert code {
   background-color: rgba(255, 255, 255, 0.2);
@@ -212,9 +232,35 @@
 
 .prose-invert blockquote {
   border-left-color: rgba(255, 255, 255, 0.5);
-  background-color: rgba(255, 255, 255, 0.1);
 }
 
 .prose-invert blockquote p {
   color: rgba(255, 255, 255, 0.8);
+}
+
+/* 聊天正文的阅读字号，避免全局覆盖 prose-sm / text-xs */
+.ai-chat-prose {
+  font-size: 16px;
+  line-height: 28px;
+}
+
+.ai-chat-prose h1 {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+  line-height: 34px;
+}
+
+.ai-chat-prose h2 {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+  line-height: 32px;
+}
+
+.ai-chat-prose h3 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 24px 0 12px;
+  line-height: 30px;
 }

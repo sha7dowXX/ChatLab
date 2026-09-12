@@ -1,24 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter, useRoute } from 'vue-router'
+import { storeToRefs } from 'pinia'
+import { useLayoutStore } from '@/stores/layout'
 import SidebarButton from './SidebarButton.vue'
 
 const { t } = useI18n()
-const router = useRouter()
-const route = useRoute()
-
-const isSettingsPage = computed(() => route.name === 'settings')
+const layoutStore = useLayoutStore()
+const { showSettings } = storeToRefs(layoutStore)
 </script>
 
 <template>
-  <div class="px-4 py-2 dark:border-gray-800 space-y-2 mb-2">
+  <div class="mb-2 space-y-2 px-2 py-2 dark:border-gray-800">
     <!-- 设置 -->
     <SidebarButton
       icon="i-heroicons-cog-6-tooth"
       :title="t('layout.footer.settings')"
-      :active="isSettingsPage"
-      @click="router.push({ name: 'settings' })"
+      :active="showSettings"
+      :tooltip="false"
+      @click="layoutStore.openSettings()"
     />
   </div>
 </template>

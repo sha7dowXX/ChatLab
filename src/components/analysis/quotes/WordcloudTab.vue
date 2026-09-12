@@ -3,19 +3,26 @@ import { ref, watch, computed, onMounted, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 const EChartWordcloud = defineAsyncComponent(() => import('@/components/charts/EChartWordcloud.vue'))
 import type { EChartWordcloudData } from '@/components/charts'
-import { LoadingState, EmptyState, UITabs } from '@/components/UI'
+import { LoadingState, UITabs, SectionCard } from '@/components/UI'
+import { useInsightViewLoading } from '@/components/UI/insight-view-loading'
+import TopicProfileCard from './TopicProfileCard.vue'
+import SharedTopicsCard from './SharedTopicsCard.vue'
+import type { WordFrequencyItem, PosTagStat } from './topicProfileTypes'
 import UserSelect from '@/components/common/UserSelect.vue'
+import WordFilterModal from '@/components/common/WordFilterModal.vue'
 import { useSettingsStore } from '@/stores/settings'
 import { useLayoutStore } from '@/stores/layout'
+import { useWordFilterStore } from '@/stores/wordFilter'
+import { useToast } from '@/composables/useToast'
+import { useDataService } from '@/services'
+import { get, post } from '@/services/utils/http'
+import type { TimeFilter } from '@openchatlab/shared-types'
 
 const { t } = useI18n()
 const settingsStore = useSettingsStore()
 const layoutStore = useLayoutStore()
-
-interface TimeFilter {
-  startTs?: number
-  endTs?: number
-}
+const wordFilterStore = useWordFilterStore()
+const toast = useToast()
 
 interface PosTagInfo {
   tag: string
@@ -25,16 +32,27 @@ interface PosTagInfo {
 }
 
 type PosFilterMode = 'all' | 'meaningful' | 'custom'
+type DictType = 'default' | 'zh-CN' | 'zh-TW'
 
-const props = defineProps<{
-  sessionId: string
-  timeFilter?: TimeFilter
-  memberId?: number | null
-}>()
+const props = withDefaults(
+  defineProps<{
+    sessionId: string
+    timeFilter?: TimeFilter
+    memberId?: number | null
+    showSharedTopics?: boolean
+    enableNodeNlpFeatures?: boolean
+    enableRecordNavigation?: boolean
+  }>(),
+  {
+    enableNodeNlpFeatures: true,
+    enableRecordNavigation: true,
+  }
+)
 
-// 状态
-const isLoading = ref(false)
-const wordcloudData = ref<EChartWordcloudData>({ words: [] })
+const isLoading = ref(true)
+useInsightViewLoading(isLoading)
+// 完整词表：按最大档一次性获取并缓存，切换词数时本地切片，避免重复请求与重复分词
+const allWords = ref<WordFrequencyItem[]>([])
 const stats = ref({
   totalMessages: 0,
   totalWords: 0,
@@ -50,8 +68,21 @@ const sizeScale = ref(1.25)
 // 最大显示词数（默认 150）
 const maxWords = ref(150)
 
+// 词云展示数据：从完整词表按当前词数本地切片，并按子集重算占比（纯本地计算，不触发后端分词）
+const wordcloudData = computed<EChartWordcloudData>(() => {
+  const sliced = allWords.value.slice(0, maxWords.value)
+  const total = sliced.reduce((sum, w) => sum + w.count, 0)
+  return {
+    words: sliced.map((w) => ({
+      word: w.word,
+      count: w.count,
+      percentage: total > 0 ? Math.round((w.count / total) * 10000) / 100 : 0,
+    })),
+  }
+})
+
 // 词性过滤模式
-const posFilterMode = ref<PosFilterMode>('meaningful')
+const posFilterMode = ref<PosFilterMode>(props.enableNodeNlpFeatures ? 'meaningful' : 'all')
 
 // 停用词过滤开关
 const enableStopwords = ref(true)
@@ -65,11 +96,138 @@ const posTagDefinitions = ref<PosTagInfo[]>([])
 // 词性统计（每个词性有多少词）
 const posTagStats = ref<Map<string, number>>(new Map())
 
+// 话题迷你词云专用数据（独立调用，仅含话题相关词性）
+const TOPIC_POS_TAGS = ['n', 'nr', 'ns', 'nt', 'nz', 'nw', 'vn', 'a', 'an']
+const topicMiniWords = ref<WordFrequencyItem[]>([])
+
+// 传给 TopicProfileCard 的主数据
+const topWords = computed<WordFrequencyItem[]>(() =>
+  wordcloudData.value.words.map((w) => ({
+    word: w.word,
+    count: w.count,
+    percentage: w.percentage ?? 0,
+  }))
+)
+
+const posTagStatsArray = computed<PosTagStat[]>(() =>
+  [...posTagStats.value.entries()].map(([tag, count]) => ({ tag, count }))
+)
+
 // 用户筛选（本地状态，覆盖 props.memberId）
 const selectedMemberId = ref<number | null>(null)
 
-// 获取当前语言设置
-const locale = computed(() => settingsStore.locale as 'zh-CN' | 'en-US')
+// 过滤方案
+const activeFilterSchemeId = computed({
+  get: () => wordFilterStore.getActiveSchemeId(props.sessionId),
+  set: (v) => wordFilterStore.setSessionScheme(props.sessionId, v),
+})
+
+const filterSchemeOptions = computed(() => [
+  { label: t('wordFilter.noFilter'), value: '__none__' },
+  ...wordFilterStore.schemeOptions.map((s) => ({
+    label: s.isDefault ? `${s.label} ★` : s.label,
+    value: s.value,
+  })),
+])
+
+const filterSchemeSelectValue = computed({
+  get: () => activeFilterSchemeId.value ?? '__none__',
+  set: (v) => {
+    activeFilterSchemeId.value = v === '__none__' ? null : v
+  },
+})
+
+const currentExcludeWords = computed(() => wordFilterStore.getExcludeWords(props.sessionId))
+
+// ==================== 词库切换 ====================
+const selectedDictType = ref<DictType>('default')
+const dictList = ref<Array<{ id: string; label: string; locale: string; downloaded: boolean; fileSize?: number }>>([])
+const isDictDownloading = ref(false)
+const downloadingDictId = ref<string | null>(null)
+const showDictPromptModal = ref(false)
+const dictListInitialized = ref(!props.enableNodeNlpFeatures)
+const DICT_PROMPT_DISMISSED_KEY = 'chatlab_zhTW_dict_prompt_dismissed'
+
+const locale = computed(() => settingsStore.locale as 'zh-CN' | 'en-US' | 'zh-TW' | 'ja-JP')
+const isTraditionalChinese = computed(() => settingsStore.locale === 'zh-TW')
+const requiresChineseDict = computed(() => locale.value.startsWith('zh'))
+
+const dictOptions = computed(() => {
+  return dictList.value
+    .filter((d) => d.downloaded)
+    .map((d) => ({
+      label: t(`quotes.wordcloud.dict.${d.id === 'zh-CN' ? 'zhCN' : d.id === 'zh-TW' ? 'zhTW' : d.id}`),
+      value: d.id as DictType,
+    }))
+})
+
+const hasAnyDict = computed(() => {
+  return dictList.value.some((d) => d.downloaded)
+})
+// 非中文语言无需词典即可分析；中文语言在词典列表初始化后可用内置分词器兜底
+const isDictListReady = computed(
+  () => !props.enableNodeNlpFeatures || !requiresChineseDict.value || dictListInitialized.value
+)
+
+const undownloadedDicts = computed(() => {
+  return dictList.value.filter((d) => !d.downloaded)
+})
+
+async function refreshDictList() {
+  if (!props.enableNodeNlpFeatures) return
+  try {
+    dictList.value = await get('/nlp/dicts')
+    // 繁体中文用户自动切换到 zh-TW（如已下载）
+    if (isTraditionalChinese.value && selectedDictType.value === 'default') {
+      const zhTW = dictList.value.find((d) => d.id === 'zh-TW')
+      if (zhTW?.downloaded) {
+        selectedDictType.value = 'zh-TW'
+      }
+    }
+    // 如果 zh-CN 已下载，default 应该用 zh-CN
+    const zhCN = dictList.value.find((d) => d.id === 'zh-CN')
+    if (zhCN?.downloaded && selectedDictType.value === 'default') {
+      selectedDictType.value = 'zh-CN'
+    }
+  } catch (error) {
+    console.error('Failed to get dict list:', error)
+  } finally {
+    dictListInitialized.value = true
+  }
+}
+
+async function handleDownloadDict(dictId: string) {
+  isDictDownloading.value = true
+  downloadingDictId.value = dictId
+  try {
+    const result = await post<{ success: boolean; error?: string }>(`/nlp/dicts/${dictId}/download`)
+    if (result.success) {
+      await refreshDictList()
+      selectedDictType.value = dictId as DictType
+      toast.success(t('quotes.wordcloud.dict.downloadSuccess'))
+    } else {
+      toast.fail(t('quotes.wordcloud.dict.downloadFailed'), { description: result.error })
+    }
+  } catch (error) {
+    toast.fail(t('quotes.wordcloud.dict.downloadFailed'))
+  } finally {
+    isDictDownloading.value = false
+    downloadingDictId.value = null
+    showDictPromptModal.value = false
+  }
+}
+
+function dismissDictPrompt() {
+  showDictPromptModal.value = false
+  localStorage.setItem(DICT_PROMPT_DISMISSED_KEY, 'true')
+}
+
+function maybeShowDictPrompt() {
+  const zhTW = dictList.value.find((d) => d.id === 'zh-TW')
+  if (isTraditionalChinese.value && zhTW && !zhTW.downloaded && !localStorage.getItem(DICT_PROMPT_DISMISSED_KEY)) {
+    showDictPromptModal.value = true
+  }
+}
 
 // 词性过滤模式选项
 const posFilterModeOptions = computed(() => [
@@ -86,6 +244,9 @@ const maxWordsOptions = [
   { label: '200', value: 200 },
   { label: '300', value: 300 },
 ]
+
+// 一次性获取的词数上限（取最大档）：切换词数时仅在本地切片，无需重新请求
+const MAX_WORDS = Math.max(...maxWordsOptions.map((o) => o.value))
 
 // 字体大小选项
 const sizeScaleOptions = computed(() => [
@@ -108,8 +269,9 @@ const posTagOptions = computed(() =>
 
 // 加载词性标签定义
 async function loadPosTagDefinitions() {
+  if (!props.enableNodeNlpFeatures) return
   try {
-    const tags = await window.nlpApi.getPosTags()
+    const tags = await get<PosTagInfo[]>('/nlp/pos-tags')
     posTagDefinitions.value = tags
     // 初始化自定义词性为有意义的词性
     customPosTags.value = tags.filter((t) => t.meaningful).map((t) => t.tag)
@@ -118,31 +280,65 @@ async function loadPosTagDefinitions() {
   }
 }
 
-// 加载词频数据
-async function loadWordFrequency() {
-  if (!props.sessionId) return
-
-  isLoading.value = true
+// 加载话题迷你词云数据（固定词性过滤）
+let topicMiniWordsRequestId = 0
+async function loadTopicMiniWords() {
+  if (!props.sessionId || !isDictListReady.value) return
+  const requestId = ++topicMiniWordsRequestId
   try {
-    const result = await window.nlpApi.getWordFrequency({
-      sessionId: props.sessionId,
+    const result = await useDataService().getWordFrequency(props.sessionId, {
       locale: locale.value,
       timeFilter: props.timeFilter ? { startTs: props.timeFilter.startTs, endTs: props.timeFilter.endTs } : undefined,
       memberId: selectedMemberId.value ?? undefined,
-      topN: maxWords.value,
+      topN: 50,
       minCount: 2,
-      posFilterMode: posFilterMode.value,
-      customPosTags: posFilterMode.value === 'custom' ? [...customPosTags.value] : undefined,
-      enableStopwords: enableStopwords.value,
+      posFilterMode: props.enableNodeNlpFeatures ? 'custom' : 'all',
+      customPosTags: props.enableNodeNlpFeatures ? [...TOPIC_POS_TAGS] : undefined,
+      enableStopwords: true,
+      dictType: selectedDictType.value,
+      excludeWords: currentExcludeWords.value.length > 0 ? [...currentExcludeWords.value] : undefined,
     })
+    if (requestId !== topicMiniWordsRequestId) return
+    topicMiniWords.value = result.words.map((w) => ({
+      word: w.word,
+      count: w.count,
+      percentage: w.percentage,
+    }))
+  } catch (error) {
+    console.error('加载话题迷你词云数据失败:', error)
+    if (requestId !== topicMiniWordsRequestId) return
+    topicMiniWords.value = []
+  }
+}
 
-    wordcloudData.value = {
-      words: result.words.map((w) => ({
-        word: w.word,
-        count: w.count,
-        percentage: w.percentage,
-      })),
-    }
+// 加载词频数据
+let wordFrequencyRequestId = 0
+async function loadWordFrequency() {
+  if (!props.sessionId || !isDictListReady.value) return
+
+  const requestId = ++wordFrequencyRequestId
+  if (allWords.value.length === 0) isLoading.value = true
+  try {
+    const result = await useDataService().getWordFrequency(props.sessionId, {
+      locale: locale.value,
+      timeFilter: props.timeFilter ? { startTs: props.timeFilter.startTs, endTs: props.timeFilter.endTs } : undefined,
+      memberId: selectedMemberId.value ?? undefined,
+      topN: MAX_WORDS,
+      minCount: 2,
+      posFilterMode: props.enableNodeNlpFeatures ? posFilterMode.value : 'all',
+      customPosTags:
+        props.enableNodeNlpFeatures && posFilterMode.value === 'custom' ? [...customPosTags.value] : undefined,
+      enableStopwords: enableStopwords.value,
+      dictType: selectedDictType.value,
+      excludeWords: currentExcludeWords.value.length > 0 ? [...currentExcludeWords.value] : undefined,
+    })
+    if (requestId !== wordFrequencyRequestId) return
+
+    allWords.value = result.words.map((w) => ({
+      word: w.word,
+      count: w.count,
+      percentage: w.percentage,
+    }))
 
     stats.value = {
       totalMessages: result.totalMessages,
@@ -160,24 +356,57 @@ async function loadWordFrequency() {
     }
   } catch (error) {
     console.error('加载词频数据失败:', error)
-    wordcloudData.value = { words: [] }
+    if (requestId !== wordFrequencyRequestId) return
+    allWords.value = []
   } finally {
-    isLoading.value = false
+    if (requestId === wordFrequencyRequestId) {
+      isLoading.value = false
+    }
   }
 }
 
-// 监听参数变化
+// 切换会话时重置筛选状态并清空词云数据，避免展示上一个会话的陈旧内容
+watch(
+  () => props.sessionId,
+  () => {
+    selectedMemberId.value = null
+    allWords.value = []
+    topicMiniWords.value = []
+    stats.value = { totalMessages: 0, totalWords: 0, uniqueWords: 0 }
+    posTagStats.value = new Map()
+  }
+)
+
+// 监听参数变化（词云主图）。注意：maxWords 不在此处——切换词数只做本地切片，不重新请求/分词。
 watch(
   () => [
     props.sessionId,
     props.timeFilter,
     selectedMemberId.value,
-    maxWords.value,
     posFilterMode.value,
     enableStopwords.value,
+    selectedDictType.value,
+    currentExcludeWords.value,
+    isDictListReady.value,
   ],
   () => {
     loadWordFrequency()
+  },
+  { immediate: true, deep: true }
+)
+
+// 监听参数变化（话题迷你词云：不受词性过滤/最大词数影响）
+watch(
+  () => [
+    props.sessionId,
+    props.timeFilter,
+    selectedMemberId.value,
+    selectedDictType.value,
+    currentExcludeWords.value,
+    isDictListReady.value,
+  ],
+  () => {
+    loadTopicMiniWords()
   },
   { immediate: true, deep: true }
 )
@@ -200,181 +429,276 @@ watch(locale, () => {
 
 // 点击词语，打开聊天记录查看器
 function handleWordClick(word: string) {
+  if (!props.enableRecordNavigation) return
   layoutStore.openChatRecordDrawer({
     keywords: [word],
   })
 }
 
-// 初始化
-onMounted(() => {
+onMounted(async () => {
+  if (!props.enableNodeNlpFeatures) return
   loadPosTagDefinitions()
+  await refreshDictList()
+  maybeShowDictPrompt()
 })
 </script>
 
 <template>
-  <div class="main-content mx-auto max-w-6xl py-6">
-    <div class="flex gap-6">
-      <!-- 左侧：词云主展示区 + 统计信息 -->
-      <div class="flex-1 min-w-0 space-y-4">
-        <!-- 词云区域（固定 16:9 长宽比） -->
-        <div class="relative w-full" style="aspect-ratio: 16 / 9">
-          <!-- 加载状态 -->
-          <LoadingState
-            v-if="isLoading"
-            :text="t('quotes.wordcloud.loading')"
-            class="absolute inset-0 z-10 rounded-lg bg-white/80 dark:bg-gray-900/80"
-          />
-
-          <!-- 空状态 -->
-          <EmptyState
-            v-else-if="wordcloudData.words.length === 0"
-            icon="i-heroicons-cloud"
-            :title="t('quotes.wordcloud.empty.title')"
-            :description="t('quotes.wordcloud.empty.description')"
-            class="h-full"
-          />
-
-          <!-- 词云图表 -->
-          <EChartWordcloud
-            v-else
-            :data="wordcloudData"
-            height="100%"
-            :max-words="maxWords"
-            :color-scheme="colorScheme"
-            :size-scale="sizeScale"
-            :loading="isLoading"
-            @word-click="handleWordClick"
-          />
-        </div>
-
-        <!-- 统计信息（横向排列，美观展示） -->
-        <div class="flex items-center justify-center gap-8 py-3">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-chat-bubble-left-right" class="text-lg text-primary-500" />
-            <div class="text-center">
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ stats.totalMessages.toLocaleString() }}
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">
-                {{ t('quotes.wordcloud.stats.messagesLabel') }}
-              </div>
-            </div>
-          </div>
-          <div class="h-8 w-px bg-gray-200 dark:bg-gray-700" />
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-document-text" class="text-lg text-emerald-500" />
-            <div class="text-center">
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ stats.totalWords.toLocaleString() }}
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('quotes.wordcloud.stats.wordsLabel') }}</div>
-            </div>
-          </div>
-          <div class="h-8 w-px bg-gray-200 dark:bg-gray-700" />
-          <div class="flex items-center gap-2">
-            <UIcon name="i-heroicons-sparkles" class="text-lg text-amber-500" />
-            <div class="text-center">
-              <div class="text-2xl font-bold text-gray-900 dark:text-white">
-                {{ stats.uniqueWords.toLocaleString() }}
-              </div>
-              <div class="text-xs text-gray-500 dark:text-gray-400">{{ t('quotes.wordcloud.stats.uniqueLabel') }}</div>
-            </div>
-          </div>
-        </div>
+  <div class="main-content mx-auto max-w-[920px] space-y-6 p-4 sm:p-6">
+    <!-- 中文词库可提升分词效果，但不能阻断后端 fallback 词云结果展示 -->
+    <div
+      v-if="props.enableNodeNlpFeatures && requiresChineseDict && !hasAnyDict"
+      class="flex flex-col gap-3 rounded-lg border border-primary-200 bg-primary-50/70 p-4 dark:border-primary-800 dark:bg-primary-950/30 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div class="flex min-w-0 items-start gap-3">
+        <UIcon name="i-heroicons-information-circle" class="mt-0.5 shrink-0 text-xl text-primary-500" />
+        <p class="min-w-0 text-sm text-primary-700 dark:text-primary-300">
+          {{ t('quotes.wordcloud.dict.needDownload') }}
+        </p>
       </div>
-
-      <!-- 右侧：筛选与配置面板 -->
-      <div class="w-[300px] shrink-0 space-y-4">
-        <!-- 显示词数 -->
-        <div>
-          <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
-            {{ t('quotes.wordcloud.config.maxWords') }}
-          </h4>
-          <UITabs v-model="maxWords" size="xs" :items="maxWordsOptions" />
-        </div>
-
-        <!-- 字体大小 -->
-        <div>
-          <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
-            {{ t('quotes.wordcloud.config.sizeScale') }}
-          </h4>
-          <UITabs v-model="sizeScale" size="xs" :items="sizeScaleOptions" />
-        </div>
-
-        <!-- 用户筛选 -->
-        <div>
-          <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
-            {{ t('quotes.wordcloud.config.userFilter') }}
-          </h4>
-          <UserSelect v-model="selectedMemberId" :session-id="props.sessionId" class="w-full" />
-        </div>
-
-        <!-- 词性过滤 -->
-        <div>
-          <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
-            {{ t('quotes.wordcloud.config.posFilter') }}
-          </h4>
-          <UITabs v-model="posFilterMode" size="xs" :items="posFilterModeOptions" />
-        </div>
-
-        <!-- 停用词过滤 -->
-        <div class="flex items-center">
-          <UCheckbox v-model="enableStopwords" :label="t('quotes.wordcloud.config.enableStopwords')" />
-        </div>
-
-        <!-- 自定义词性选择（仅在 custom 模式下显示） -->
-        <div v-if="posFilterMode === 'custom'" class="space-y-2">
-          <div class="flex items-center justify-between">
-            <h4 class="text-xs font-medium text-gray-600 dark:text-gray-400">
-              {{ t('quotes.wordcloud.posFilter.customHint') }}
-            </h4>
-            <!-- 快捷操作 -->
-            <div class="flex gap-1">
-              <UButton
-                size="xs"
-                variant="ghost"
-                color="neutral"
-                @click="customPosTags = posTagDefinitions.filter((t) => t.meaningful).map((t) => t.tag)"
-              >
-                {{ t('quotes.wordcloud.posFilter.selectMeaningful') }}
-              </UButton>
-              <UButton
-                size="xs"
-                variant="ghost"
-                color="neutral"
-                @click="customPosTags = posTagDefinitions.map((t) => t.tag)"
-              >
-                {{ t('quotes.wordcloud.posFilter.selectAll') }}
-              </UButton>
-              <UButton size="xs" variant="ghost" color="neutral" @click="customPosTags = []">
-                {{ t('quotes.wordcloud.posFilter.clearAll') }}
-              </UButton>
-            </div>
-          </div>
-          <!-- 词性标签（带滚动） -->
-          <div class="flex flex-wrap gap-1.5 max-h-[360px] overflow-y-auto">
-            <UBadge
-              v-for="tag in posTagOptions"
-              :key="tag.value"
-              :color="customPosTags.includes(tag.value) ? 'primary' : 'neutral'"
-              :variant="customPosTags.includes(tag.value) ? 'solid' : 'outline'"
-              class="cursor-pointer select-none transition-colors"
-              @click="
-                () => {
-                  if (customPosTags.includes(tag.value)) {
-                    customPosTags = customPosTags.filter((t) => t !== tag.value)
-                  } else {
-                    customPosTags = [...customPosTags, tag.value]
-                  }
-                }
-              "
-            >
-              {{ tag.label }}
-              <span v-if="tag.count > 0" class="ml-1 opacity-60">({{ tag.count }})</span>
-            </UBadge>
-          </div>
-        </div>
+      <div class="flex shrink-0 flex-wrap gap-2">
+        <UButton
+          v-for="dict in dictList"
+          :key="dict.id"
+          size="sm"
+          color="primary"
+          :loading="isDictDownloading && downloadingDictId === dict.id"
+          :disabled="isDictDownloading && downloadingDictId !== dict.id"
+          icon="i-heroicons-arrow-down-tray"
+          @click="handleDownloadDict(dict.id)"
+        >
+          {{ t(`quotes.wordcloud.dict.download_${dict.id}`, dict.label) }}
+        </UButton>
       </div>
     </div>
+
+    <template v-if="isDictListReady">
+      <div class="space-y-6">
+        <LoadingState v-if="isLoading && topWords.length === 0" :text="t('quotes.wordcloud.loading')" class="py-8" />
+
+        <!-- 1. 话题画像卡（主角） -->
+        <TopicProfileCard
+          :total-messages="stats.totalMessages"
+          :total-words="stats.totalWords"
+          :unique-words="stats.uniqueWords"
+          :top-words="topWords"
+          :topic-words="topicMiniWords"
+          :pos-tag-stats="posTagStatsArray"
+          :time-filter="props.timeFilter"
+          @word-click="handleWordClick"
+        />
+
+        <!-- 2. 共同话题（仅私聊） -->
+        <SharedTopicsCard
+          v-if="props.showSharedTopics"
+          :session-id="props.sessionId"
+          :time-filter="props.timeFilter"
+          :dict-type="selectedDictType"
+          :exclude-words="currentExcludeWords"
+          @word-click="handleWordClick"
+        />
+
+        <!-- 3. 热门词汇分布（词云 + 配置面板） -->
+        <SectionCard :title="t('quotes.wordcloud.stats.wordsLabel')" :show-divider="false">
+          <div class="flex flex-col gap-6 p-4 sm:p-6 lg:flex-row">
+            <!-- 左侧：词云图 -->
+            <div class="flex min-w-0 flex-1 flex-col">
+              <div class="relative w-full" style="aspect-ratio: 16 / 9">
+                <LoadingState
+                  v-if="isLoading"
+                  :text="t('quotes.wordcloud.loading')"
+                  class="absolute inset-0 z-10 rounded-lg bg-white/80 dark:bg-page-dark/80"
+                />
+                <div
+                  v-else-if="topWords.length === 0"
+                  class="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-gray-200 bg-gray-50/40 text-gray-500 dark:border-gray-700 dark:bg-gray-800/30 dark:text-gray-400"
+                >
+                  <UIcon name="i-heroicons-chat-bubble-bottom-center-text" class="text-2xl" />
+                  <p class="text-xs font-medium">{{ t('quotes.wordcloud.empty.title') }}</p>
+                  <p class="px-4 text-center text-[11px]">{{ t('quotes.wordcloud.empty.description') }}</p>
+                </div>
+                <EChartWordcloud
+                  v-else
+                  :data="wordcloudData"
+                  height="100%"
+                  :max-words="maxWords"
+                  :color-scheme="colorScheme"
+                  :size-scale="sizeScale"
+                  :loading="isLoading"
+                  @word-click="handleWordClick"
+                />
+              </div>
+              <p v-if="props.enableRecordNavigation" class="mt-2 text-center text-xs text-gray-500 dark:text-gray-400">
+                {{ t('quotes.wordcloud.stats.clickHint') }}
+              </p>
+            </div>
+
+            <!-- 右侧：配置面板（平铺展示） -->
+            <div class="w-full shrink-0 space-y-4 lg:w-[280px]">
+              <!-- 显示词数 -->
+              <div>
+                <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('quotes.wordcloud.config.maxWords') }}
+                </h4>
+                <UITabs v-model="maxWords" size="xs" :items="maxWordsOptions" />
+              </div>
+
+              <!-- 字体大小 -->
+              <div>
+                <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('quotes.wordcloud.config.sizeScale') }}
+                </h4>
+                <UITabs v-model="sizeScale" size="xs" :items="sizeScaleOptions" />
+              </div>
+
+              <!-- 用户筛选 -->
+              <div>
+                <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('quotes.wordcloud.config.userFilter') }}
+                </h4>
+                <UserSelect v-model="selectedMemberId" :session-id="props.sessionId" class="w-full" />
+              </div>
+
+              <!-- 词库选择 -->
+              <div v-if="props.enableNodeNlpFeatures">
+                <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('quotes.wordcloud.config.dict') }}
+                </h4>
+                <div class="space-y-2">
+                  <UITabs v-if="dictOptions.length > 1" v-model="selectedDictType" size="xs" :items="dictOptions" />
+                  <div v-for="dict in undownloadedDicts" :key="dict.id" class="flex items-center gap-2">
+                    <UButton
+                      size="xs"
+                      variant="soft"
+                      color="primary"
+                      :loading="isDictDownloading && downloadingDictId === dict.id"
+                      :disabled="isDictDownloading && downloadingDictId !== dict.id"
+                      icon="i-heroicons-arrow-down-tray"
+                      @click="handleDownloadDict(dict.id)"
+                    >
+                      {{ t(`quotes.wordcloud.dict.download_${dict.id}`, t('quotes.wordcloud.dict.download')) }}
+                    </UButton>
+                    <span class="text-xs text-gray-400 dark:text-gray-500">
+                      {{ t('quotes.wordcloud.dict.downloadHint') }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 词性过滤 -->
+              <div v-if="props.enableNodeNlpFeatures">
+                <h4 class="mb-2 text-xs font-medium text-gray-600 dark:text-gray-400">
+                  {{ t('quotes.wordcloud.config.posFilter') }}
+                </h4>
+                <UITabs v-model="posFilterMode" size="xs" :items="posFilterModeOptions" />
+              </div>
+
+              <!-- 停用词过滤 -->
+              <div class="flex items-center">
+                <UCheckbox v-model="enableStopwords" :label="t('quotes.wordcloud.config.enableStopwords')" />
+              </div>
+
+              <!-- 自定义词性选择（仅在 custom 模式下显示） -->
+              <div v-if="props.enableNodeNlpFeatures && posFilterMode === 'custom'" class="space-y-2">
+                <div class="flex items-center justify-between">
+                  <h4 class="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    {{ t('quotes.wordcloud.posFilter.customHint') }}
+                  </h4>
+                  <div class="flex gap-1">
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      color="neutral"
+                      @click="customPosTags = posTagDefinitions.filter((t) => t.meaningful).map((t) => t.tag)"
+                    >
+                      {{ t('quotes.wordcloud.posFilter.selectMeaningful') }}
+                    </UButton>
+                    <UButton
+                      size="xs"
+                      variant="ghost"
+                      color="neutral"
+                      @click="customPosTags = posTagDefinitions.map((t) => t.tag)"
+                    >
+                      {{ t('quotes.wordcloud.posFilter.selectAll') }}
+                    </UButton>
+                    <UButton size="xs" variant="ghost" color="neutral" @click="customPosTags = []">
+                      {{ t('quotes.wordcloud.posFilter.clearAll') }}
+                    </UButton>
+                  </div>
+                </div>
+                <div class="flex max-h-[360px] flex-wrap gap-1.5 overflow-y-auto">
+                  <UBadge
+                    v-for="tag in posTagOptions"
+                    :key="tag.value"
+                    :color="customPosTags.includes(tag.value) ? 'primary' : 'neutral'"
+                    :variant="customPosTags.includes(tag.value) ? 'solid' : 'outline'"
+                    class="cursor-pointer select-none transition-colors"
+                    @click="
+                      () => {
+                        if (customPosTags.includes(tag.value)) {
+                          customPosTags = customPosTags.filter((t) => t !== tag.value)
+                        } else {
+                          customPosTags = [...customPosTags, tag.value]
+                        }
+                      }
+                    "
+                  >
+                    {{ tag.label }}
+                    <span v-if="tag.count > 0" class="ml-1 opacity-60">({{ tag.count }})</span>
+                  </UBadge>
+                </div>
+              </div>
+
+              <!-- 关键词过滤 -->
+              <div>
+                <div class="mb-2 flex items-center justify-between">
+                  <h4 class="text-xs font-medium text-gray-600 dark:text-gray-400">
+                    {{ t('wordFilter.filterScheme') }}
+                  </h4>
+                  <UButton
+                    size="xs"
+                    variant="ghost"
+                    color="neutral"
+                    icon="i-heroicons-cog-6-tooth"
+                    :aria-label="t('wordFilter.manage')"
+                    @click="wordFilterStore.openModal()"
+                  />
+                </div>
+                <UITabs v-model="filterSchemeSelectValue" size="xs" :items="filterSchemeOptions" />
+                <p v-if="currentExcludeWords.length > 0" class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+                  {{ t('wordFilter.activeCount', { count: currentExcludeWords.length }) }}
+                </p>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      </div>
+    </template>
+
+    <!-- 繁体中文词库下载提示弹窗 -->
+    <UModal
+      v-if="props.enableNodeNlpFeatures"
+      v-model:open="showDictPromptModal"
+      :title="t('quotes.wordcloud.dict.promptTitle')"
+    >
+      <template #body>
+        <div class="space-y-4">
+          <p class="text-sm text-gray-600 dark:text-gray-300">
+            {{ t('quotes.wordcloud.dict.promptDescription') }}
+          </p>
+          <div class="flex justify-end gap-2">
+            <UButton variant="ghost" color="neutral" @click="dismissDictPrompt">
+              {{ t('quotes.wordcloud.dict.promptLater') }}
+            </UButton>
+            <UButton color="primary" :loading="isDictDownloading" @click="handleDownloadDict('zh-TW')">
+              {{ t('quotes.wordcloud.dict.promptDownload') }}
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
+
+    <!-- 过滤方案管理弹窗 -->
+    <WordFilterModal />
   </div>
 </template>

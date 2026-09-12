@@ -1,0 +1,33 @@
+/**
+ * 导入模块入口
+ * 统一导出流式导入相关函数和类型
+ */
+
+// 流式导入（核心导入功能）
+export {
+  streamImport,
+  autoImport,
+  autoImportBatch,
+  streamParseFileInfo,
+  analyzeNewImport,
+  type StreamImportResult,
+  type AutoImportResult,
+  type AutoImportBatchItemResult,
+  type WorkerAutoImportBatchItem,
+  type StreamParseFileInfoResult,
+  type AnalyzeNewImportResult,
+} from './streamImport'
+
+// 增量导入
+export {
+  analyzeIncrementalImport,
+  incrementalImport,
+  type ImportOptions,
+  type IncrementalAnalyzeResult,
+  type IncrementalImportResult,
+} from './incrementalImport'
+
+export { analyzePushImport, pushImport } from './pushImport'
+
+// 工具函数（供其他模块使用）
+export { sendProgress, generateSessionId, getDbPath, createDatabaseWithoutIndexes, createIndexes } from './utils'

@@ -1,6 +1,5 @@
 {
   "cluster": {
-    "title": "やり取り頻度",
     "rankingView": "ランキング表示",
     "memberView": "メンバー表示",
     "matrixView": "マトリクス表示",
@@ -43,10 +42,74 @@
     "lengthGroupedTitle": "文字数区間分布",
     "lengthGroupedHint": "5文字ごとにグループ化",
     "noTextMessages": "テキストメッセージがありません",
-    "noData": "データがありません"
+    "noData": "データがありません",
+    "profile": {
+      "avgLengthUnit": "{count} 文字/件",
+      "textExpression": "テキスト表現力",
+      "textExpressionDesc": "最長メッセージ {count} 文字",
+      "mediaRichness": "メディアの豊かさ",
+      "shortMaster": "短文マスター",
+      "shortMasterDesc": "5文字以下 {count} 件",
+      "essayLover": "長文好き",
+      "essayLoverDesc": "{threshold}文字以上のメッセージ",
+      "typeDistribution": "メッセージ種類",
+      "heroLine1Prefix": "合計で",
+      "heroLine1Suffix": "件のメッセージを交わしました"
+    },
+    "typeCard": {
+      "watermark": "タイプレポート",
+      "nonTextPrefix": "テキスト以外に、",
+      "nonTextImage": "画像",
+      "nonTextEmoji": "スタンプ",
+      "nonTextVoice": "音声",
+      "nonTextVideo": "動画",
+      "nonTextFile": "ファイル",
+      "nonTextLink": "リンク",
+      "unitImage": "枚の画像",
+      "unitEmoji": "個のスタンプ",
+      "unitVoice": "件の音声",
+      "unitVideo": "本の動画",
+      "unitFile": "個のファイル",
+      "unitLink": "個のリンク"
+    },
+    "timeCard": {
+      "hourlyDistribution": "24h 分布",
+      "watermark": "時間レポート",
+      "heroDaysIn": "日間で",
+      "heroDaysActive": "日アクティブ",
+      "heroAvgPrefix": "平均",
+      "heroAvgSuffix": "件/日",
+      "personalityNightOwl": "夜型",
+      "personalityEarlyBird": "朝型",
+      "personalityLunchChat": "昼休み派",
+      "personalityEveningChat": "夜の語らい",
+      "personalityDaytime": "日中活動",
+      "personalityEveryday": "毎日活動",
+      "personalityWeekend": "週末活躍",
+      "personalityWeekday": "平日活躍",
+      "peakRecord": "ピーク記録",
+      "peakRecordDesc": "1日最多 {count} 件",
+      "topHoursLabel": "最もアクティブ",
+      "peakWeekdayLabel": "ピーク曜日",
+      "weekendRatio": "週末比率",
+      "weekendRatioDesc": "週末メッセージ比率"
+    },
+    "timeAnalysis": {
+      "memberTrendTitle": "メッセージトレンド",
+      "memberTrendHint": "メンバー別月次メッセージ推移"
+    },
+    "typeAnalysis": {
+      "textDepthTitle": "テキスト深度分析",
+      "textTotal": "テキスト総数",
+      "avgLength": "平均文字数",
+      "medianLength": "中央値",
+      "maxLength": "最長メッセージ",
+      "percentiles": "文字数パーセンタイル",
+      "shortMessages": "短文(≤5文字)",
+      "essayMessages": "長文(≥30文字)"
+    }
   },
   "interaction": {
-    "mentionGraph": "メンション関係図",
     "layout": "レイアウト",
     "circular": "サークル",
     "force": "フォースレイアウト",
@@ -54,6 +117,150 @@
     "reset": "リセット",
     "graphHint": "全 {nodes} 名のメンバー、{links} 件のインタラクション",
     "noInteraction": "メンションデータがありません"
+  },
+  "groupRelationshipGalaxy": {
+    "canvasLabel": "グループの交流関係ギャラクシー",
+    "loading": "グループ内の関係を整理しています...",
+    "loadFailed": "関係ギャラクシーを読み込めませんでした",
+    "webglUnavailable": "この環境ではギャラクシーを表示できません",
+    "webglUnavailableDescription": "ハードウェアアクセラレーションを有効にするか、WebGL 対応環境で再試行してください。",
+    "emptyTitle": "交流データが不足しています",
+    "emptyDescription": "この期間には、2人以上の返信、メンション、または連続した発言が必要です。",
+    "resetView": "表示をリセット",
+    "closeDetail": "メンバー詳細を閉じる",
+    "messageCount": "グループ発言数",
+    "relationshipScore": "関係の強さ",
+    "lastInteraction": "最近の交流",
+    "signalComposition": "交流の内訳",
+    "replies": "返信",
+    "mentions": "メンション",
+    "proximity": "発言の近さ",
+    "strongConnections": "親しいつながり",
+    "connectionSignals": "返信 {replies} · メンション {mentions} · 近接 {proximity}",
+    "noConnections": "表示できる直接のつながりはありません"
+  },
+  "relationship": {
+    "empty": {
+      "title": "関係データがありません",
+      "description": "選択した期間内にセッションが見つかりません。"
+    },
+    "trend": {
+      "title": "主動性の推移",
+      "hint": "青い線は {name} の月別主動発起率。50% 線がバランス基準です"
+    },
+    "hero": {
+      "totalSessionsPrefix": "2人の会話は合計",
+      "totalSessionsSuffix": "回",
+      "initiativePrefix": "",
+      "initiativeByPrefix": "の話題の切り出しは",
+      "initiativeBySuffix": "から始まりました",
+      "initiateTimes": "回発起"
+    },
+    "closerTitle": "会話の締め役",
+    "closerHint": "話題が終わるときに最後に発言した人を集計します。",
+    "watermarkReport": "関係レポート",
+    "monthFormat": "{year}年{month}月",
+    "monthShortFormat": "{month}月",
+    "iceBreaker": {
+      "title": "アイスブレイカー",
+      "hint": "24時間以上の沈黙を破って話しかけた回数"
+    },
+    "responseLatency": {
+      "title": "返信速度",
+      "hint": "相手がメッセージを送った後、平均何分で返信するか",
+      "seconds": "{n} 秒",
+      "minutesSeconds": "{m}分{s}秒",
+      "hours": "{n} 時間",
+      "hoursMinutes": "{h} 時間 {m} 分"
+    },
+    "perseverance": {
+      "title": "粘り強さ",
+      "hintWithThreshold": "相手が{threshold}以内に返信しないうちに、もう一通メッセージを送った回数",
+      "thresholdMinutes": "{n}分"
+    },
+    "trajectory": {
+      "title": "やり取りの推移",
+      "description": "月ごとの変化から2人のやり取りを振り返ります",
+      "metrics": {
+        "activity": "会話の頻度",
+        "response": "返信速度",
+        "perseverance": "連続送信"
+      },
+      "conversations": "会話回数",
+      "iceBreaks": "会話の再開",
+      "keyMoments": "注目の月",
+      "activityPeak": "会話が最も多い月",
+      "activityPeakDetail": "会話 {count} 回",
+      "iceBreakPeak": "会話の再開が最多",
+      "iceBreakPeakDetail": "会話の再開 {count} 回",
+      "fastestResponse": "返信が最速",
+      "fastestResponseDetail": "平均返信時間 {duration}",
+      "showAll": "すべての月を表示",
+      "hideAll": "月別データを閉じる",
+      "month": "月"
+    }
+  },
+  "journey": {
+    "loadError": "チャットの歩みを読み込めませんでした",
+    "empty": "歩みを作成するためのメッセージがまだ十分にありません",
+    "hero": {
+      "prefix": "ふたりで歩んだ",
+      "summary": "{activeMonths}か月、{activeDays}日間にメッセージが残っています。",
+      "filteredSummary": "選択範囲では、{activeMonths}か月、{activeDays}日間にメッセージが残っています。",
+      "footprint": "会話の足跡",
+      "monthCount": "{count}か月の記録",
+      "monthTooltip": "{month} · {count}件のメッセージ"
+    },
+    "metrics": {
+      "peakMonth": "最もにぎやかな月",
+      "activeMonths": "会話した月",
+      "longestConversation": "最も長い会話",
+      "longestSilence": "最も長い沈黙",
+      "messagesAndDays": "{messages}件 · {days}日間アクティブ",
+      "monthsRatio": "{active} / {total}か月",
+      "activeDays": "合計{count}日間アクティブ",
+      "conversationDetail": "{date} · {count}件",
+      "reopenedBy": "その後、{name}から再開",
+      "reopened": "その後、会話が再開しました",
+      "noIndex": "会話インデックスがありません",
+      "noSilence": "24時間を超える沈黙はありません"
+    },
+    "years": {
+      "title": "一年ずつ振り返る",
+      "description": "年ごとに残された会話の章をたどります",
+      "summary": "{messages}件 · {days}日間 · {months}か月アクティブ",
+      "quiet": "この年にはメッセージがありません",
+      "peak": "ピーク月 · {count}件"
+    },
+    "milestones": {
+      "title": "大切な節目",
+      "description": "始まりから再会まで、会話の歩みをつなぎます",
+      "start": "ここから始まりました",
+      "startDetail": "現在の記録にある最初のメッセージ",
+      "peak": "最もにぎやかな月",
+      "peakDetail": "この月に{count}件のメッセージを交わしました",
+      "longestConversation": "最も長い会話",
+      "conversationDetail": "{duration}にわたり、{count}件のメッセージ",
+      "longestSilence": "最も長い沈黙",
+      "silenceRange": "{start} – {end}",
+      "silenceDetailWithMember": "{duration}後、{name}から再開",
+      "silenceDetail": "{duration}後に会話が再開しました",
+      "end": "記録はここまで",
+      "endDetail": "現在の記録にある最後のメッセージ",
+      "filteredEndDetail": "選択範囲にある最後のメッセージ"
+    },
+    "duration": {
+      "lessThanMinute": "1分未満",
+      "minutes": "{count}分",
+      "hours": "{count}時間",
+      "hoursMinutes": "{hours}時間{minutes}分",
+      "days": "{count}日",
+      "daysHours": "{days}日{hours}時間",
+      "months": "{count}か月",
+      "years": "{count}年",
+      "yearsMonths": "{years}年{months}か月"
+    },
+    "watermark": "チャットの歩み"
   },
   "timeline": {
     "title": "タイムライン表示",

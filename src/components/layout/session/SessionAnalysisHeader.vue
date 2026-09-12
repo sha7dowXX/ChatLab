@@ -1,0 +1,126 @@
+<script setup lang="ts">
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useLayoutStore } from '@/stores/layout'
+import CaptureButton from '@/components/common/CaptureButton.vue'
+import TimeSelect from '@/components/common/TimeSelect.vue'
+import PageHeader from '@/components/layout/PageHeader.vue'
+import { PageTabs } from '@/components/navigation'
+import type { TimeRangeValue, TimeSelectState } from '@/components/common/TimeSelect.vue'
+
+interface SessionAnalysisTab {
+  id: string
+  labelKey: string
+  icon: string
+}
+
+const activeTab = defineModel<string>('activeTab', { required: true })
+const timeRangeValue = defineModel<TimeRangeValue | null>('timeRangeValue', { required: true })
+
+const props = withDefaults(
+  defineProps<{
+    title: string
+    avatar?: string | null
+    icon: string
+    iconClass: string
+    tabs: SessionAnalysisTab[]
+    currentSessionId: string | null
+    initialTimeState: Partial<TimeSelectState>
+    showSessionActions?: boolean
+  }>(),
+  {
+    showSessionActions: true,
+  }
+)
+
+const emit = defineEmits<{
+  (e: 'openIncrementalImport'): void
+  (e: 'openMemberManagement'): void
+  (e: 'openChatRecord'): void
+  (e: 'update:fullRange', value: { start: number; end: number } | null): void
+  (e: 'update:availableYears', value: number[]): void
+  (e: 'timeRangeInitialized', hasRange: boolean): void
+}>()
+
+const { t } = useI18n()
+const layoutStore = useLayoutStore()
+
+const timeSelectVisible = computed(() => !['ai-chat', 'memory', 'more'].includes(activeTab.value))
+const navigationItems = computed(() =>
+  props.tabs.map((tab) => ({
+    id: tab.id,
+    label: t(tab.labelKey),
+    icon: tab.icon,
+  }))
+)
+</script>
+
+<template>
+  <PageHeader :title="title" :avatar="avatar" size="compact" :icon="icon" :icon-class="iconClass">
+    <template #actions>
+      <template v-if="showSessionActions && layoutStore.effectiveToolsPanelPosition === 'header'">
+        <UTooltip :text="t('analysis.tooltip.viewChatRecord')">
+          <UButton
+            icon="i-heroicons-chat-bubble-bottom-center-text"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            class="hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="emit('openChatRecord')"
+          />
+        </UTooltip>
+        <UTooltip :text="t('analysis.tooltip.incrementalImport')">
+          <UButton
+            icon="i-heroicons-plus-circle"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            class="hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="emit('openIncrementalImport')"
+          />
+        </UTooltip>
+        <UTooltip :text="t('analysis.tooltip.memberManagement')">
+          <UButton
+            icon="i-heroicons-user-group"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            class="hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="emit('openMemberManagement')"
+          />
+        </UTooltip>
+        <CaptureButton color="gray" />
+        <UTooltip :text="t('analysis.tooltip.more')">
+          <UButton
+            data-tools-panel-trigger
+            icon="i-heroicons-ellipsis-horizontal"
+            variant="ghost"
+            color="gray"
+            size="sm"
+            class="hover:bg-gray-100 dark:hover:bg-gray-800"
+            @click="layoutStore.toggleToolsPanelOpen()"
+          />
+        </UTooltip>
+      </template>
+      <CaptureButton v-else-if="showSessionActions" color="gray" />
+    </template>
+
+    <div
+      class="mt-3 flex flex-col items-stretch gap-2 sm:min-h-8 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+    >
+      <PageTabs v-model="activeTab" class="min-w-0 shrink" :items="navigationItems" />
+      <!-- 不使用时间范围的一级 Tab 不挂载筛选器，避免发起无关查询。 -->
+      <div v-if="timeSelectVisible" class="max-w-full overflow-x-auto scrollbar-hide">
+        <TimeSelect
+          v-model="timeRangeValue"
+          :session-id="currentSessionId ?? undefined"
+          :initial-state="initialTimeState"
+          size="sm"
+          @update:full-range="emit('update:fullRange', $event)"
+          @update:available-years="emit('update:availableYears', $event)"
+          @initialization-complete="emit('timeRangeInitialized', $event)"
+        />
+      </div>
+    </div>
+  </PageHeader>
+</template>

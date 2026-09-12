@@ -1,0 +1,846 @@
+import { ref, computed, watch, type Ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useSettingsStore } from '@/stores/settings'
+import { useLLMStore } from '@/stores/llm'
+import { useLLMService } from '@/services'
+import { canReuseExistingApiKey, getConnectionModeForConfig, type ConnectionMode } from './apiKeyReuse'
+
+// ==================== 类型 ====================
+
+export interface AIServiceConfig {
+  id: string
+  name: string
+  provider: string
+  apiKey?: string
+  apiKeySet: boolean
+  model?: string
+  baseUrl?: string
+  apiFormat?: string
+  customModels?: Array<{ id: string; name: string }>
+  createdAt: number
+  updatedAt: number
+}
+
+export const API_FORMAT_DEFAULT = 'openai-completions'
+
+export const API_FORMAT_OPTIONS: Array<{ value: string; labelKey: string }> = [
+  { value: 'openai-completions', labelKey: 'settings.aiConfig.modal.apiFormatOpenAI' },
+  { value: 'anthropic-messages', labelKey: 'settings.aiConfig.modal.apiFormatAnthropic' },
+  { value: 'google-generative-ai', labelKey: 'settings.aiConfig.modal.apiFormatGemini' },
+  { value: 'openai-responses', labelKey: 'settings.aiConfig.modal.apiFormatOpenAIResponses' },
+]
+
+export interface Provider {
+  id: string
+  name: string
+  defaultBaseUrl: string
+  models: Array<{ id: string; name: string; description?: string }>
+}
+
+// ==================== Composable ====================
+
+const CHINA_MARKET_PROVIDERS = ['doubao', 'siliconflow']
+
+export function useAIConfigForm(props: {
+  open: Ref<boolean>
+  mode: Ref<'add' | 'edit'>
+  config: Ref<AIServiceConfig | null>
+  providers: Ref<Provider[]>
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const { t, locale } = useI18n()
+  const settingsStore = useSettingsStore()
+  const llmStore = useLLMStore()
+
+  // ============ 工具函数 ============
+
+  function getLocalizedProviderName(providerId: string): string {
+    const key = `providers.${providerId}.name`
+    const translated = t(key)
+    return translated === key ? providerId : translated
+  }
+
+  // ============ 响应式状态 ============
+
+  const aiTips = computed(() => {
+    const config = JSON.parse(
+      localStorage.getItem(`chatlab_app_config_${locale.value}`) || localStorage.getItem('chatlab_app_config') || '{}'
+    )
+    return config.aiTips || {}
+  })
+
+  const connectionMode = ref<ConnectionMode>('preset')
+  const connectionModeItems = computed(() => [
+    { label: t('settings.aiConfig.modal.presetService'), value: 'preset' },
+    { label: t('settings.aiConfig.modal.thirdPartyService'), value: 'openai-compat' },
+    { label: t('settings.aiConfig.modal.localService'), value: 'local' },
+  ])
+
+  const isValidating = ref(false)
+  const isSaving = ref(false)
+  const showValidationFailConfirm = ref(false)
+  const validationFailMessage = ref('')
+
+  const showAddModelDialog = ref(false)
+  const newModelName = ref('')
+  const newModelId = ref('')
+  const newModelContextWindow = ref<number | undefined>(undefined)
+  const compatModels = ref<Array<{ id: string; name: string }>>([])
+
+  const formData = ref({
+    provider: '',
+    apiKey: '',
+    model: '',
+    baseUrl: '',
+    apiFormat: API_FORMAT_DEFAULT,
+    customName: '',
+  })
+
+  const validationResult = ref<'idle' | 'valid' | 'invalid'>('idle')
+  const validationMessage = ref('')
+
+  // ============ 计算属性 ============
+
+  const registryProviders = computed(() => {
+    return llmStore.providerRegistry.filter((p) => {
+      if (!settingsStore.locale.startsWith('zh') && CHINA_MARKET_PROVIDERS.includes(p.id)) {
+        return false
+      }
+      return true
+    })
+  })
+
+  const officialProviders = computed(() =>
+    registryProviders.value.filter((p) => p.kind === 'official' && p.id !== 'openai-compatible')
+  )
+
+  const customProviders = computed(() => registryProviders.value.filter((p) => !p.builtin))
+
+  const currentProviderDef = computed(() => llmStore.providerRegistry.find((p) => p.id === formData.value.provider))
+
+  const isLocalMode = computed(() => connectionMode.value === 'local')
+  const isOpenAICompat = computed(() => connectionMode.value === 'openai-compat')
+  const isPresetMode = computed(() => connectionMode.value === 'preset')
+  const isCompatMode = computed(() => isLocalMode.value || isOpenAICompat.value)
+
+  const catalogModels = computed(() => {
+    if (!formData.value.provider) return []
+    return llmStore
+      .getModelsByProviderId(formData.value.provider)
+      .filter((m) => !m.capabilities.includes('embedding') && !m.capabilities.includes('ranking'))
+  })
+
+  const modelTabItems = computed(() => {
+    if (isCompatMode.value) {
+      return compatModels.value.map((m) => ({ label: m.name, value: m.id }))
+    }
+    return catalogModels.value.map((m) => ({
+      label: m.name,
+      value: m.id,
+    }))
+  })
+
+  const selectedModelIsCustom = computed(() => {
+    if (!formData.value.model) return false
+    if (isCompatMode.value) {
+      return compatModels.value.some((m) => m.id === formData.value.model)
+    }
+    const model = catalogModels.value.find((m) => m.id === formData.value.model)
+    return model ? !model.builtin : false
+  })
+
+  const selectedModelContextWindow = computed(() => {
+    if (!formData.value.model) return undefined
+    const providerId = formData.value.provider || 'openai-compatible'
+    const model =
+      llmStore.getModelById(providerId, formData.value.model) || llmStore.findModelAcrossProviders(formData.value.model)
+    return model?.contextWindow
+  })
+
+  const canReuseStoredKey = computed(() => {
+    const { provider, apiKey, baseUrl } = formData.value
+    return canReuseExistingApiKey({
+      mode: props.mode.value,
+      existingApiKeySet: props.config.value?.apiKeySet,
+      hasNewApiKey: !!apiKey.trim(),
+      originalProvider: props.config.value?.provider,
+      currentProvider: provider,
+      originalConnectionMode: props.config.value ? getConnectionModeForConfig(props.config.value) : undefined,
+      currentConnectionMode: connectionMode.value,
+      originalBaseUrl: props.config.value?.baseUrl,
+      currentBaseUrl: baseUrl.trim() || undefined,
+    })
+  })
+
+  const canSave = computed(() => {
+    const { provider, apiKey, baseUrl, model } = formData.value
+    const existingKeySet = canReuseStoredKey.value
+
+    if (isLocalMode.value) {
+      return baseUrl.trim() && model.trim()
+    }
+
+    if (isOpenAICompat.value) {
+      return baseUrl.trim() && (apiKey.trim() || existingKeySet) && model.trim()
+    }
+
+    if (!provider) return false
+    return apiKey.trim() || existingKeySet
+  })
+
+  const apiFormatItems = computed(() =>
+    API_FORMAT_OPTIONS.map((opt) => ({
+      label: t(opt.labelKey),
+      value: opt.value,
+    }))
+  )
+
+  const modalTitle = computed(() =>
+    props.mode.value === 'add' ? t('settings.aiConfig.modal.addConfig') : t('settings.aiConfig.modal.editConfig')
+  )
+
+  const BUILTIN_PROVIDER_API: Record<string, string> = {
+    gemini: 'google-generative-ai',
+    anthropic: 'anthropic-messages',
+  }
+
+  const API_PATH_SUFFIX: Record<string, string> = {
+    'openai-completions': '/chat/completions',
+    'openai-responses': '/responses',
+    'anthropic-messages': '/v1/messages',
+  }
+
+  const resolvedApiUrl = computed(() => {
+    const rawInput = formData.value.baseUrl?.trim()
+    const raw = rawInput || (isPresetMode.value ? currentProviderDef.value?.defaultBaseUrl : '')
+    if (!raw) return ''
+
+    const effectiveApiFormat = isPresetMode.value
+      ? BUILTIN_PROVIDER_API[formData.value.provider] || API_FORMAT_DEFAULT
+      : formData.value.apiFormat || API_FORMAT_DEFAULT
+
+    const trimmed = raw.replace(/\/+$/, '')
+
+    let baseUrl: string
+    if (effectiveApiFormat === 'anthropic-messages') {
+      baseUrl = trimmed.replace(/\/v1\/?$/, '')
+    } else if (effectiveApiFormat === 'openai-completions' || effectiveApiFormat === 'openai-responses') {
+      try {
+        const parsed = new URL(trimmed)
+        if (!trimmed.endsWith('/v1') && (parsed.pathname === '/' || parsed.pathname === '')) {
+          baseUrl = trimmed + '/v1'
+        } else {
+          baseUrl = trimmed
+        }
+      } catch {
+        baseUrl = trimmed
+      }
+    } else {
+      baseUrl = trimmed
+    }
+
+    const suffix = API_PATH_SUFFIX[effectiveApiFormat]
+    return suffix ? baseUrl + suffix : baseUrl
+  })
+
+  // ============ 表单操作 ============
+
+  function resetForm() {
+    connectionMode.value = 'preset'
+    compatModels.value = []
+    const defaultProvider = officialProviders.value[0]?.id || ''
+    const defaultModels = defaultProvider ? llmStore.getModelsByProviderId(defaultProvider) : []
+    const defaultChat = defaultModels.find((m) => m.recommendedFor.includes('chat'))
+    const defaultProviderDef = defaultProvider ? llmStore.providerRegistry.find((p) => p.id === defaultProvider) : null
+    formData.value = {
+      provider: defaultProvider,
+      apiKey: '',
+      model: defaultChat?.id || defaultModels[0]?.id || '',
+      baseUrl: defaultProviderDef?.defaultBaseUrl || '',
+      apiFormat: API_FORMAT_DEFAULT,
+      customName: '',
+    }
+    validationResult.value = 'idle'
+    validationMessage.value = ''
+  }
+
+  function initFromConfig(config: AIServiceConfig) {
+    const providerDef = llmStore.providerRegistry.find((p) => p.id === config.provider)
+    const isCompat = config.provider === 'openai-compatible' || config.provider.startsWith('custom:')
+    const hasModelInCatalog = !!(config.model && llmStore.getModelById(config.provider, config.model))
+
+    if (isCompat) {
+      connectionMode.value = getConnectionModeForConfig(config)
+      if (config.customModels && config.customModels.length > 0) {
+        compatModels.value = [...config.customModels]
+      } else {
+        compatModels.value = config.model ? [{ id: config.model, name: config.model }] : []
+      }
+    } else {
+      connectionMode.value = 'preset'
+      compatModels.value = []
+    }
+
+    formData.value = {
+      provider: config.provider,
+      apiKey: config.apiKey || '',
+      model: isCompat ? config.model || '' : hasModelInCatalog ? config.model || '' : '',
+      baseUrl: config.baseUrl || providerDef?.defaultBaseUrl || '',
+      apiFormat: config.apiFormat || API_FORMAT_DEFAULT,
+      customName: config.name || '',
+    }
+    validationResult.value = 'idle'
+    validationMessage.value = ''
+  }
+
+  function selectProvider(providerId: string) {
+    formData.value.provider = providerId
+    validationResult.value = 'idle'
+    validationMessage.value = ''
+
+    formData.value.baseUrl = llmStore.providerRegistry.find((p) => p.id === providerId)?.defaultBaseUrl || ''
+    const models = llmStore.getModelsByProviderId(providerId)
+    const chatModels = models.filter((m) => m.recommendedFor.includes('chat'))
+    formData.value.model = chatModels[0]?.id || models[0]?.id || ''
+    formData.value.apiKey = ''
+  }
+
+  function onConnectionModeChange(mode: string | number) {
+    connectionMode.value = mode as ConnectionMode
+    validationResult.value = 'idle'
+    validationMessage.value = ''
+
+    if (mode === 'local') {
+      formData.value.provider = 'openai-compatible'
+      formData.value.baseUrl = 'http://localhost:11434'
+      formData.value.model = compatModels.value[0]?.id || ''
+      formData.value.apiKey = ''
+    } else if (mode === 'openai-compat') {
+      formData.value.provider = 'openai-compatible'
+      formData.value.baseUrl = ''
+      formData.value.model = compatModels.value[0]?.id || ''
+      formData.value.apiKey = ''
+    } else {
+      compatModels.value = []
+      const defaultProvider = officialProviders.value[0]?.id || ''
+      formData.value.provider = defaultProvider
+      formData.value.baseUrl = llmStore.providerRegistry.find((p) => p.id === defaultProvider)?.defaultBaseUrl || ''
+      const models = defaultProvider ? llmStore.getModelsByProviderId(defaultProvider) : []
+      const chatModels = models.filter((m) => m.recommendedFor.includes('chat'))
+      formData.value.model = chatModels[0]?.id || models[0]?.id || ''
+      formData.value.apiKey = ''
+    }
+  }
+
+  // ============ 远程模型获取 ============
+
+  const isFetchingModels = ref(false)
+  const remoteModels = ref<Array<{ id: string; name: string; ownedBy?: string; contextWindow?: number }>>([])
+  const remoteModelsError = ref('')
+  const showRemoteModelBrowser = ref(false)
+
+  const addedModelIds = computed(() => {
+    if (isCompatMode.value) {
+      return new Set(compatModels.value.map((m) => m.id))
+    }
+    return new Set(catalogModels.value.map((m) => m.id))
+  })
+
+  const effectiveApiFormat = computed(() => {
+    if (isPresetMode.value) {
+      return BUILTIN_PROVIDER_API[formData.value.provider] || API_FORMAT_DEFAULT
+    }
+    return formData.value.apiFormat || API_FORMAT_DEFAULT
+  })
+
+  const canFetchModels = computed(() => {
+    if (effectiveApiFormat.value === 'anthropic-messages') return false
+    const baseUrl = formData.value.baseUrl || currentProviderDef.value?.defaultBaseUrl || ''
+    const hasKey = formData.value.apiKey.trim() || isLocalMode.value || canReuseStoredKey.value
+    return !!(baseUrl.trim() && hasKey)
+  })
+
+  async function fetchRemoteModels() {
+    const baseUrl = formData.value.baseUrl || currentProviderDef.value?.defaultBaseUrl || ''
+    const apiKey = formData.value.apiKey || (isLocalMode.value ? 'sk-no-key-required' : '')
+    const canReuse = canReuseStoredKey.value
+    if (!baseUrl || (!apiKey && !canReuse)) return
+
+    const configId = !apiKey && canReuse ? props.config.value?.id : undefined
+
+    isFetchingModels.value = true
+    remoteModelsError.value = ''
+    showRemoteModelBrowser.value = true
+
+    try {
+      const result = await useLLMService().fetchRemoteModels(
+        formData.value.provider || 'openai-compatible',
+        apiKey,
+        baseUrl,
+        effectiveApiFormat.value,
+        configId
+      )
+      if (result.success && result.models) {
+        const providerId = formData.value.provider || 'openai-compatible'
+        remoteModels.value = result.models.map((m) => {
+          if (m.contextWindow) return m
+          const catalogModel = llmStore.getModelById(providerId, m.id) || llmStore.findModelAcrossProviders(m.id)
+          return catalogModel?.contextWindow ? { ...m, contextWindow: catalogModel.contextWindow } : m
+        })
+      } else {
+        remoteModelsError.value = result.error || t('settings.aiConfig.modal.fetchModelsError')
+      }
+    } catch (error) {
+      remoteModelsError.value = String(error)
+    } finally {
+      isFetchingModels.value = false
+    }
+  }
+
+  async function addRemoteModel(model: { id: string; name: string; contextWindow?: number }) {
+    if (isCompatMode.value) {
+      if (!compatModels.value.some((m) => m.id === model.id)) {
+        compatModels.value.push({ id: model.id, name: model.name })
+      }
+      const providerId = formData.value.provider || 'openai-compatible'
+      if (model.contextWindow && !llmStore.getModelById(providerId, model.id)?.contextWindow) {
+        try {
+          await useLLMService().addCustomModel({
+            id: model.id,
+            providerId,
+            name: model.name,
+            contextWindow: model.contextWindow,
+            capabilities: ['chat'],
+            recommendedFor: [],
+            description: '',
+            status: 'stable',
+          })
+          await llmStore.refreshConfigs()
+        } catch {
+          // already exists
+        }
+      }
+    } else {
+      const providerId = formData.value.provider || 'openai-compatible'
+      if (!catalogModels.value.some((m) => m.id === model.id)) {
+        try {
+          await useLLMService().addCustomModel({
+            id: model.id,
+            providerId,
+            name: model.name,
+            contextWindow: model.contextWindow || undefined,
+            capabilities: ['chat'],
+            recommendedFor: [],
+            description: '',
+            status: 'stable',
+          })
+          await llmStore.refreshConfigs()
+        } catch {
+          // already exists
+        }
+      }
+    }
+    if (!formData.value.model) {
+      formData.value.model = model.id
+    }
+  }
+
+  async function addAllRemoteModels(models: Array<{ id: string; name: string }>) {
+    for (const model of models) {
+      await addRemoteModel(model)
+    }
+  }
+
+  // ============ 自定义模型 CRUD ============
+
+  function openAddModelDialog() {
+    newModelName.value = ''
+    newModelId.value = ''
+    newModelContextWindow.value = undefined
+    showAddModelDialog.value = true
+  }
+
+  async function confirmAddModel() {
+    const modelId = newModelId.value.trim()
+    const modelName = newModelName.value.trim() || modelId
+    if (!modelId) return
+
+    if (isCompatMode.value) {
+      if (!compatModels.value.some((m) => m.id === modelId)) {
+        compatModels.value.push({ id: modelId, name: modelName })
+      }
+      formData.value.model = modelId
+      showAddModelDialog.value = false
+      return
+    }
+
+    const providerId = formData.value.provider || 'openai-compatible'
+
+    try {
+      await useLLMService().addCustomModel({
+        id: modelId,
+        providerId,
+        name: modelName,
+        contextWindow: newModelContextWindow.value || undefined,
+        capabilities: ['chat'],
+        recommendedFor: [],
+        description: '',
+        status: 'stable',
+      })
+      await llmStore.refreshConfigs()
+      formData.value.model = modelId
+      showAddModelDialog.value = false
+    } catch (error) {
+      console.error('添加自定义模型失败：', error)
+    }
+  }
+
+  const showEditModelDialog = ref(false)
+  const editModelContextWindow = ref<number | undefined>(undefined)
+  const editModelName = ref('')
+
+  function openEditModelDialog() {
+    const modelId = formData.value.model
+    if (!modelId) return
+    const providerId = formData.value.provider || 'openai-compatible'
+    const model = llmStore.getModelById(providerId, modelId)
+    editModelContextWindow.value = model?.contextWindow ?? undefined
+    editModelName.value = model?.name ?? ''
+    showEditModelDialog.value = true
+  }
+
+  async function confirmEditModel() {
+    const modelId = formData.value.model
+    if (!modelId) return
+    const providerId = formData.value.provider || 'openai-compatible'
+    try {
+      const updates: Record<string, unknown> = {
+        contextWindow: editModelContextWindow.value || undefined,
+      }
+      if (editModelName.value.trim()) {
+        updates.name = editModelName.value.trim()
+      }
+      const svc = useLLMService()
+      const result = await svc.updateCustomModel(providerId, modelId, updates)
+      if (!result.success) {
+        await svc.addCustomModel({
+          id: modelId,
+          providerId,
+          name: editModelName.value.trim() || modelId,
+          contextWindow: editModelContextWindow.value || undefined,
+          capabilities: ['chat'],
+          recommendedFor: [],
+          description: '',
+          status: 'stable',
+        })
+      }
+      await llmStore.refreshConfigs()
+    } catch (error) {
+      console.error('编辑模型失败：', error)
+    }
+    showEditModelDialog.value = false
+  }
+
+  async function deleteCustomModel(modelId: string) {
+    if (isCompatMode.value) {
+      const index = compatModels.value.findIndex((m) => m.id === modelId)
+      if (index !== -1) compatModels.value.splice(index, 1)
+      if (formData.value.model === modelId) {
+        formData.value.model = compatModels.value[0]?.id || ''
+      }
+      return
+    }
+
+    const providerId = formData.value.provider || 'openai-compatible'
+    try {
+      await useLLMService().deleteCustomModel(providerId, modelId)
+      await llmStore.refreshConfigs()
+      if (formData.value.model === modelId) {
+        const models = catalogModels.value
+        formData.value.model = models[0]?.id || ''
+      }
+    } catch (error) {
+      console.error('删除自定义模型失败：', error)
+    }
+  }
+
+  // ============ 验证 ============
+
+  async function validateKey() {
+    const { provider, baseUrl } = formData.value
+    const apiKey = formData.value.apiKey.trim()
+    const canReuse = canReuseStoredKey.value
+
+    if (!isPresetMode.value) {
+      if (!baseUrl) return
+      if (isOpenAICompat.value && !apiKey && !canReuse) return
+    } else {
+      if (!provider || (!apiKey && !canReuse)) {
+        validationResult.value = 'idle'
+        validationMessage.value = ''
+        return
+      }
+    }
+
+    isValidating.value = true
+    validationResult.value = 'idle'
+
+    const configId = !apiKey && canReuse ? props.config.value?.id : undefined
+
+    try {
+      const testApiKey = !apiKey && canReuse ? '' : apiKey || 'sk-no-key-required'
+      const result = await useLLMService().validateApiKey(
+        provider || 'openai-compatible',
+        testApiKey,
+        baseUrl || undefined,
+        formData.value.model || undefined,
+        undefined,
+        configId
+      )
+      validationResult.value = result.success ? 'valid' : 'invalid'
+      if (result.success) {
+        validationMessage.value = t('settings.aiConfig.modal.validationSuccess')
+      } else {
+        validationMessage.value = result.error || t('settings.aiConfig.modal.validationFailed')
+      }
+    } catch (error) {
+      validationResult.value = 'invalid'
+      validationMessage.value = t('settings.aiConfig.modal.validationError') + String(error)
+    } finally {
+      isValidating.value = false
+    }
+  }
+
+  // ============ 保存 ============
+
+  function generateName(): string {
+    if (isCompatMode.value && formData.value.baseUrl) {
+      try {
+        const url = new URL(formData.value.baseUrl)
+        return url.hostname
+      } catch {
+        return t('settings.aiConfig.modal.customService')
+      }
+    }
+
+    const def = currentProviderDef.value
+    if (def) return getLocalizedProviderName(def.id) || def.name
+
+    const legacy = props.providers.value.find((p) => p.id === formData.value.provider)
+    if (legacy) return legacy.name
+
+    return formData.value.baseUrl || t('settings.aiConfig.modal.customService')
+  }
+
+  async function doSave() {
+    isSaving.value = true
+    try {
+      const finalProvider = formData.value.provider
+      let finalApiKey = formData.value.apiKey.trim()
+      if (!finalApiKey && isLocalMode.value) {
+        finalApiKey = 'sk-no-key-required'
+      }
+      const finalName = formData.value.customName.trim() || generateName()
+
+      const persistCustomModels =
+        isCompatMode.value && compatModels.value.length > 0
+          ? compatModels.value.map((m) => ({ id: m.id, name: m.name }))
+          : undefined
+      if (props.mode.value === 'add') {
+        const savedApiFormat = isCompatMode.value ? formData.value.apiFormat || undefined : undefined
+        const result = await useLLMService().addConfig({
+          name: finalName,
+          provider: finalProvider,
+          apiKey: finalApiKey,
+          model: formData.value.model.trim() || undefined,
+          baseUrl: formData.value.baseUrl.trim() || undefined,
+          apiFormat: savedApiFormat,
+          customModels: persistCustomModels,
+        })
+
+        if (result.success) {
+          props.onClose()
+          props.onSaved()
+        } else {
+          console.error('添加配置失败：', result.error)
+        }
+      } else {
+        const savedApiFormat = isCompatMode.value ? formData.value.apiFormat || undefined : undefined
+        const updates: Record<string, unknown> = {
+          name: finalName,
+          provider: finalProvider,
+          model: formData.value.model.trim() || undefined,
+          baseUrl: formData.value.baseUrl.trim() || undefined,
+          apiFormat: savedApiFormat,
+          customModels: persistCustomModels,
+        }
+
+        if (formData.value.apiKey.trim() || isLocalMode.value) {
+          updates.apiKey = finalApiKey
+        }
+
+        const result = await useLLMService().updateConfig(props.config.value!.id, updates)
+
+        if (result.success) {
+          props.onClose()
+          props.onSaved()
+        } else {
+          console.error('更新配置失败：', result.error)
+        }
+      }
+    } catch (error) {
+      console.error('保存配置失败：', error)
+    } finally {
+      isSaving.value = false
+    }
+  }
+
+  async function saveConfig() {
+    if (!canSave.value) return
+
+    if (validationResult.value === 'valid') {
+      return doSave()
+    }
+
+    const hasNewApiKey = !!formData.value.apiKey.trim()
+    const isEditWithExistingKey = canReuseExistingApiKey({
+      mode: props.mode.value,
+      existingApiKeySet: props.config.value?.apiKeySet,
+      hasNewApiKey,
+      originalProvider: props.config.value?.provider,
+      currentProvider: formData.value.provider,
+      originalConnectionMode: props.config.value ? getConnectionModeForConfig(props.config.value) : undefined,
+      currentConnectionMode: connectionMode.value,
+      originalBaseUrl: props.config.value?.baseUrl,
+      currentBaseUrl: formData.value.baseUrl.trim() || undefined,
+    })
+    if (isEditWithExistingKey) {
+      return doSave()
+    }
+
+    isValidating.value = true
+    try {
+      const testApiKey = formData.value.apiKey.trim() || 'sk-no-key-required'
+      const result = await useLLMService().validateApiKey(
+        formData.value.provider || 'openai-compatible',
+        testApiKey,
+        formData.value.baseUrl.trim() || undefined,
+        formData.value.model.trim() || undefined
+      )
+
+      if (result.success) {
+        validationResult.value = 'valid'
+        validationMessage.value = ''
+        return doSave()
+      }
+
+      validationResult.value = 'invalid'
+      validationFailMessage.value = result.error || t('settings.aiConfig.modal.validationFailed')
+      showValidationFailConfirm.value = true
+    } catch (error) {
+      validationFailMessage.value = String(error)
+      showValidationFailConfirm.value = true
+    } finally {
+      isValidating.value = false
+    }
+  }
+
+  function confirmSaveAnyway() {
+    showValidationFailConfirm.value = false
+    doSave()
+  }
+
+  function cancelSave() {
+    showValidationFailConfirm.value = false
+  }
+
+  // ============ 监听器 ============
+
+  watch(props.open, (isOpen) => {
+    if (isOpen) {
+      if (props.mode.value === 'edit' && props.config.value) {
+        initFromConfig(props.config.value)
+      } else {
+        resetForm()
+      }
+    }
+  })
+
+  watch(
+    () => formData.value.apiKey,
+    () => {
+      validationResult.value = 'idle'
+      validationMessage.value = ''
+    }
+  )
+
+  // ============ 返回 ============
+
+  return {
+    // 工具
+    getLocalizedProviderName,
+
+    // 状态
+    aiTips,
+    connectionMode,
+    connectionModeItems,
+    isValidating,
+    isSaving,
+    showValidationFailConfirm,
+    validationFailMessage,
+    showAddModelDialog,
+    newModelName,
+    newModelId,
+    newModelContextWindow,
+    formData,
+    validationResult,
+    validationMessage,
+
+    // 计算属性
+    officialProviders,
+    customProviders,
+    currentProviderDef,
+    isLocalMode,
+    isOpenAICompat,
+    isPresetMode,
+    isCompatMode,
+    modelTabItems,
+    selectedModelIsCustom,
+    selectedModelContextWindow,
+    canSave,
+    canReuseStoredKey,
+    apiFormatItems,
+    modalTitle,
+    resolvedApiUrl,
+
+    // 远程模型
+    isFetchingModels,
+    remoteModels,
+    remoteModelsError,
+    showRemoteModelBrowser,
+    addedModelIds,
+    canFetchModels,
+
+    // 编辑模型
+    showEditModelDialog,
+    editModelContextWindow,
+    editModelName,
+
+    // 方法
+    selectProvider,
+    onConnectionModeChange,
+    openAddModelDialog,
+    confirmAddModel,
+    openEditModelDialog,
+    confirmEditModel,
+    deleteCustomModel,
+    validateKey,
+    saveConfig,
+    confirmSaveAnyway,
+    cancelSave,
+    fetchRemoteModels,
+    addRemoteModel,
+    addAllRemoteModels,
+  }
+}

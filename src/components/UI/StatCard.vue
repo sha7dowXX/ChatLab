@@ -1,8 +1,11 @@
 <script setup lang="ts">
 /**
  * 统计卡片组件
- * 用于展示单个统计指标
+ * 基于 ThemeCard 的组合封装，用于展示单个统计指标
  */
+import ThemeCard from './ThemeCard.vue'
+import UiIcon from './primitives/UiIcon.vue'
+
 defineProps<{
   /** 指标标签 */
   label: string
@@ -18,7 +21,6 @@ defineProps<{
   iconBg?: 'pink' | 'amber' | 'blue' | 'green' | 'red' | 'gray'
 }>()
 
-// 颜色映射
 const valueColorMap: Record<string, string> = {
   pink: 'text-pink-600 dark:text-pink-400',
   amber: 'text-amber-600 dark:text-amber-400',
@@ -39,9 +41,7 @@ const iconBgMap: Record<string, string> = {
 </script>
 
 <template>
-  <div
-    class="relative overflow-hidden rounded-[20px] border border-gray-200/60 bg-white p-5 shadow-sm transition-all hover:shadow-md dark:border-white/5 dark:bg-card-dark"
-  >
+  <ThemeCard class="p-5">
     <div class="flex items-start justify-between">
       <div class="min-w-0 flex-1">
         <p class="text-sm font-medium text-gray-500 dark:text-gray-400">{{ label }}</p>
@@ -57,7 +57,7 @@ const iconBgMap: Record<string, string> = {
         class="ml-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
         :class="iconBgMap[iconBg || 'gray']"
       >
-        <UIcon v-if="icon.startsWith('i-')" :name="icon" class="h-5 w-5" />
+        <UiIcon v-if="icon.startsWith('i-')" :name="icon" size="lg" />
         <span v-else class="text-xl">{{ icon }}</span>
       </div>
     </div>
@@ -67,5 +67,5 @@ const iconBgMap: Record<string, string> = {
         <span class="text-gray-500 dark:text-gray-400">{{ subtext }}</span>
       </slot>
     </div>
-  </div>
+  </ThemeCard>
 </template>

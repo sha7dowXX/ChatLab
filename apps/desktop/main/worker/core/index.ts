@@ -1,0 +1,24 @@
+/**
+ * 核心基础设施模块入口
+ * 统一导出数据库核心工具和性能日志
+ */
+
+export {
+  initDbDir,
+  getDbPath,
+  openDatabase,
+  openRawDatabase,
+  closeDatabase,
+  closeAllDatabases,
+  getDbDir,
+  getCacheDir,
+  getTempDir,
+  getLogsDir,
+  buildTimeFilter,
+  buildSystemMessageFilter,
+  wrapAsDatabaseAdapter,
+  openDatabaseAdapter,
+  type TimeFilter,
+} from './dbCore'
+
+export { initPerfLog } from './perfLogger'

@@ -1,69 +1,103 @@
 <div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="https://github.com/ChatLab/ChatLab/raw/main/public/images/banner-light.png">
+    <img src="https://github.com/ChatLab/ChatLab/raw/main/public/images/banner.png" alt="ChatLab" title="ChatLab" width="500" />
+  </picture>
 
-<img src="./public/images/chatlab.svg" alt="ChatLab" title="ChatLab" width="300" />
+聊天记忆驱动的 AI Agent
 
-本地化的聊天记录分析工具，通过 AI Agent 回顾你的社交记忆
+[English](README.md) | 简体中文
 
-[English](./README.md) | 简体中文 | [繁體中文](./README.zh-TW.md) | [日本語](./README.ja-JP.md)
-
-[官网](https://chatlab.fun/cn/) · [下载指南](https://chatlab.fun/cn/?type=download) · [项目文档](https://chatlab.fun/cn/usage/) · [路线图](https://chatlabfun.featurebase.app/roadmap) · [问题提交](https://github.com/hellodigua/ChatLab/issues)
+[官网](https://chatlab.fun/cn/) · [文档](https://docs.chatlab.fun/cn/) · [快速开始](https://docs.chatlab.fun/cn/usage/quick-start) · [路线图](https://chatlab.fun/cn/roadmap/tasks) · [Releases](https://github.com/ChatLab/ChatLab/releases)
 
 </div>
 
-ChatLab 是一个专注于社交记录分析的本地化应用。通过 AI Agent和灵活的 SQL 引擎，你可以自由地拆解、查询甚至重构你的聊天记录数据。
+ChatLab 是一个专注于聊天记录分析的本地化应用。通过 AI Agent和灵活的 SQL 引擎，你可以自由地分析你的聊天记录数据。
 
-目前已支持： WhatsApp、LINE、QQ、Discord、Instagram、Telegram的聊天记录分析，即将支持： iMessage、Messenger、Kakao Talk。
+目前已支持：**WhatsApp、LINE、QQ、Discord、Instagram、Telegram、iMessage、Google Chat**。即将支持：Messenger、KakaoTalk。
+
+> 首次安装？从这里开始：[快速开始](https://docs.chatlab.fun/cn/usage/quick-start)
 
 ## 核心特性
 
 - 🚀 **极致性能**：使用流式计算与多线程并行架构，就算是百万条级别的聊天记录，依然拥有丝滑交互和响应。
 - 🔒 **保护隐私**：聊天记录和配置都存在你的本地数据库，所有分析都在本地进行（AI 功能例外）。
-- 🤖 **智能 AI Agent**：集成 10+ Function Calling 工具，支持动态调度，深度挖掘聊天记录中的更多有趣。
+- 🤖 **智能 AI Agent**：集成 24+ Function Calling 工具，支持动态调度，深度挖掘聊天记录中的更多有趣。
 - 📊 **多维数据可视化**：提供活跃度趋势、时间规律分布、成员排行等多个维度的直观分析图表。
 - 🧩 **格式标准化**：通过强大的数据抽象层，抹平不同聊天软件的格式差异，即使是再小众的聊天软件，也能分析。
+
+## 安装
+
+### 桌面端
+
+前往[官网](https://chatlab.fun/cn/?type=download)或 [GitHub Releases](https://github.com/ChatLab/ChatLab/releases) 下载对应操作系统的安装包，双击安装即可。
+
+### CLI
+
+需要 Node.js ≥ 20。
+
+```bash
+npm i chatlab-cli -g
+```
+
+启动 ChatLab：
+
+```bash
+clb web            # 启动 API + Web UI，并在浏览器中打开
+clb web --no-open  # 启动 API + Web UI，但不自动打开浏览器
+clb web --headless # 仅启动 API，不挂载 Web UI（供脚本 / AI Agent 调用）
+```
+
+常用选项：`--port <端口>`（默认 3110）、`--host <地址>`、`--token <令牌>`。
+
+如果希望服务常驻后台（开机自启 + 崩溃自动重启）：
+
+```bash
+clb web --daemon   # 注册为系统服务（macOS / Linux）
+clb status           # 查看常驻状态
+clb stop             # 停止并取消常驻
+```
+
+完整使用说明请见[快速开始指南](https://docs.chatlab.fun/cn/usage/quick-start)。
 
 ## 使用指南
 
 - [下载 ChatLab 指南](https://chatlab.fun/cn/?type=download)
-- [导出聊天记录指南](https://chatlab.fun/cn/usage/how-to-export.html)
-- [标准化格式规范](https://chatlab.fun/cn/standard/chatlab-format.html)
-- [故障排查指南](https://chatlab.fun/cn/usage/troubleshooting.html)
+- [导出聊天记录指南](https://docs.chatlab.fun/cn/usage/how-to-export)
+- [标准化格式规范](https://docs.chatlab.fun/cn/standard/chatlab-format)
+- [故障排查指南](https://docs.chatlab.fun/cn/usage/troubleshooting)
 
 ## 预览界面
 
 预览更多请前往官网 [chatlab.fun](https://chatlab.fun/cn/)
 
-![预览界面](/public/images/intro_zh.png)
+![预览界面](public/images/intro_zh.png)
 
-## 系统架构
+## 架构概览
 
-### 架构原则（Architecture Principles）
+ChatLab 是一个基于 pnpm monorepo 的工程，桌面端使用 Electron + Vue 3 + Nuxt UI + Tailwind CSS，核心业务逻辑沉淀在共享包（`@openchatlab/core`、`@openchatlab/node-runtime`、`@openchatlab/tools`），桌面端与 CLI 服务端复用同一份逻辑，保持功能同步。
+
+数据流分五个阶段：**格式嗅探 → 流式解析 → 本地落盘 → SQL + AI 查询 → 可视化呈现**。
+
+详细架构请参考[项目文档](https://docs.chatlab.fun/cn/intro)。
+
+### 架构原则
 
 - **Local-first by default**：原始聊天记录、索引与配置默认留在本地，优先保护隐私边界。
 - **Streaming over buffering**：以流式解析和增量处理为核心，面向大体量导出文件保持稳定吞吐。
 - **Composable intelligence**：AI 能力通过 Agent + Tool Calling 组合，避免将业务逻辑硬编码到单一模型。
 - **Schema-first evolution**：围绕统一数据结构构建导入、查询、分析与可视化，降低演进成本。
 
-### 运行时架构（Runtime Architecture）
+---
 
-- **Main Process（控制层）**：`electron/main/index.ts` 负责生命周期与窗口；`electron/main/ipc/` 提供分域 IPC；`electron/main/ai/` 与 `electron/main/i18n/` 提供 AI 与国际化基础能力。
-- **Worker Layer（计算层）**：`electron/main/worker/` 通过 `workerManager` 调度任务，隔离导入、索引与查询计算，降低 UI 阻塞风险。
-- **Renderer Layer（交互层）**：基于 Vue 3 + Nuxt UI + Tailwind CSS，承载管理、私聊、群聊与分析视图；通过 `electron/preload/index.ts` 暴露受控 API，确保渲染层与主进程隔离。
+## 本地开发
 
-### 数据闭环（Data Pipeline）
-
-1. **导入接入**：`parser/` 先做格式嗅探，再由对应解析器执行标准化转换。
-2. **数据落盘**：流式写入本地数据库，构建会话、成员、消息等核心实体。
-3. **索引构建**：基于会话与时间维度生成分析索引，支撑时间线与检索能力。
-4. **分析查询**：`worker/query/*` 提供活跃度、互动关系、SQL Lab 与 AI 检索等查询能力。
-5. **结果呈现**：渲染层将查询结果转换为图表、榜单、时间线与对话式分析体验。
-
-## 本地运行
+完整协作者说明见[开发指南](https://docs.chatlab.fun/cn/contributing/development)。
 
 ### 环境要求
 
-- Node.js >= 20
-- pnpm
+- Node.js >= 24 < 25
+- pnpm >= 11 < 12
 
 ### 启动步骤
 
@@ -71,8 +105,18 @@ ChatLab 是一个专注于社交记录分析的本地化应用。通过 AI Agent
 # 安装依赖
 pnpm install
 
-# 启动开发模式
+# 启动开发模式 — 会提示选择要启动的目标
 pnpm dev
+```
+
+也可以直接启动指定目标：
+
+```bash
+pnpm dev:desktop   # Electron 桌面端
+pnpm dev:cli-web   # CLI Web 前端 + 本地服务
+pnpm dev:web-wasm  # 纯浏览器 Web WASM
+pnpm dev:serve     # 仅 CLI 服务端
+pnpm docs:dev      # 文档站
 ```
 
 若 Electron 在启动时异常，可尝试使用 `electron-fix`：
@@ -82,17 +126,24 @@ npm install electron-fix -g
 electron-fix start
 ```
 
-## 贡献指南
+## 隐私政策与用户协议
+
+使用本软件前，请阅读 [隐私政策与用户协议](src/assets/docs/agreement_zh.md)
+
+## 社区
 
 提交 Pull Request 前请遵循以下原则：
 
 - 明显的 Bug 修复可直接提交
 - 对于新功能，请先提交 Issue 进行讨论，**未经讨论直接提交的 PR 会被关闭**
 - 一个 PR 尽量只做一件事，若改动较大，请考虑拆分为多个独立的 PR
+- 本地运行、目录职责、测试检查和 AI 协作说明见[开发指南](https://docs.chatlab.fun/cn/contributing/development)
 
-## 隐私政策与用户协议
+感谢所有为 ChatLab 做出贡献的人！
 
-使用本软件前，请阅读 [隐私政策与用户协议](./src/assets/docs/agreement_zh.md)
+<a href="https://github.com/ChatLab/ChatLab/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ChatLab/ChatLab" />
+</a>
 
 ## License
 

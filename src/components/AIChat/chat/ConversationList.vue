@@ -1,9 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import dayjs from 'dayjs'
+import SidebarCollapseButton from '@/components/common/sidebar/SidebarCollapseButton.vue'
+import { useAIService } from '@/services'
+import { useLayoutStore } from '@/stores/layout'
 
 const { t } = useI18n()
+const layoutStore = useLayoutStore()
+const { isAIChatSidebarCollapsed: isCollapsed } = storeToRefs(layoutStore)
+const { toggleAIChatSidebar } = layoutStore
 
 interface Conversation {
   id: string
@@ -13,33 +20,57 @@ interface Conversation {
   updatedAt: number
 }
 
+export type AIConversationListItem = Conversation
+
+interface ConversationGroup {
+  label: string
+  conversations: Conversation[]
+}
+
 // Props
-const props = defineProps<{
-  sessionId: string
-  activeId: string | null
-  /** 仅禁用新建、重命名、删除等会改写状态的操作，仍允许只读切换查看其他对话。 */
-  disabled?: boolean
-}>()
+const props = withDefaults(
+  defineProps<{
+    sessionId: string
+    activeId: string | null
+    /** 仅禁用新建、重命名、删除等会改写状态的操作，仍允许只读切换查看其他对话。 */
+    disabled?: boolean
+    /** 传入后切换为受控模式，不再访问平台 AI service。 */
+    conversations?: Conversation[]
+    loading?: boolean
+    embedded?: boolean
+    collapsible?: boolean
+  }>(),
+  {
+    collapsible: true,
+  }
+)
 
 // Emits
 const emit = defineEmits<{
   select: [id: string]
   create: []
   delete: [id: string]
+  rename: [payload: { id: string; title: string }]
 }>()
 
 // State
-const conversations = ref<Conversation[]>([])
+const serviceConversations = ref<Conversation[]>([])
 const isLoading = ref(false)
 const editingId = ref<string | null>(null)
 const editingTitle = ref('')
-const isCollapsed = ref(false)
+const menuOpenId = ref<string | null>(null)
+const isControlled = computed(() => props.conversations !== undefined)
+const visibleConversations = computed(() => props.conversations ?? serviceConversations.value)
+const visibleLoading = computed(() => (isControlled.value ? (props.loading ?? false) : isLoading.value))
+const canCollapse = computed(() => props.collapsible !== false)
+const collapsed = computed(() => canCollapse.value && isCollapsed.value)
 
 // 加载对话列表
 async function loadConversations() {
+  if (isControlled.value) return
   isLoading.value = true
   try {
-    conversations.value = await window.aiApi.getConversations(props.sessionId)
+    serviceConversations.value = await useAIService().getAIChats(props.sessionId)
   } catch (error) {
     console.error('加载对话列表失败：', error)
   } finally {
@@ -47,19 +78,50 @@ async function loadConversations() {
   }
 }
 
-// 格式化时间（数据库存储的是秒级时间戳，需转换为毫秒级）
-function formatTime(timestamp: number): string {
-  const now = dayjs()
-  const date = dayjs(timestamp * 1000)
+// 按时间分组
+const groupedConversations = computed<ConversationGroup[]>(() => {
+  if (visibleConversations.value.length === 0) return []
 
-  if (now.diff(date, 'day') === 0) {
-    return date.format('HH:mm')
-  } else if (now.diff(date, 'day') < 7) {
-    return date.format('ddd HH:mm')
-  } else {
-    return date.format('MM-DD')
+  const now = dayjs()
+  const day7 = now.subtract(7, 'day').startOf('day')
+  const day30 = now.subtract(30, 'day').startOf('day')
+
+  const last7: Conversation[] = []
+  const last30: Conversation[] = []
+  const monthBuckets = new Map<string, Conversation[]>()
+
+  for (const conv of visibleConversations.value) {
+    const date = dayjs(conv.updatedAt * 1000)
+    if (date.isAfter(day7)) {
+      last7.push(conv)
+    } else if (date.isAfter(day30)) {
+      last30.push(conv)
+    } else {
+      const key = date.format('YYYY-MM')
+      if (!monthBuckets.has(key)) monthBuckets.set(key, [])
+      monthBuckets.get(key)!.push(conv)
+    }
   }
-}
+
+  const groups: ConversationGroup[] = []
+  if (last7.length > 0) {
+    groups.push({ label: t('ai.chat.conversation.group.last7Days'), conversations: last7 })
+  }
+  if (last30.length > 0) {
+    groups.push({ label: t('ai.chat.conversation.group.last30Days'), conversations: last30 })
+  }
+
+  const sortedMonths = [...monthBuckets.keys()].sort((a, b) => b.localeCompare(a))
+  for (const month of sortedMonths) {
+    const d = dayjs(month + '-01')
+    groups.push({
+      label: d.format(d.year() === now.year() ? 'M月' : 'YYYY年M月'),
+      conversations: monthBuckets.get(month)!,
+    })
+  }
+
+  return groups
+})
 
 // 获取对话标题
 function getTitle(conv: Conversation): string {
@@ -77,9 +139,14 @@ function startEditing(conv: Conversation) {
 async function saveTitle(convId: string) {
   if (props.disabled) return
   if (editingTitle.value.trim()) {
+    if (isControlled.value) {
+      emit('rename', { id: convId, title: editingTitle.value.trim() })
+      editingId.value = null
+      return
+    }
     try {
-      await window.aiApi.updateConversationTitle(convId, editingTitle.value.trim())
-      const conv = conversations.value.find((c) => c.id === convId)
+      await useAIService().updateAIChatTitle(convId, editingTitle.value.trim())
+      const conv = serviceConversations.value.find((c) => c.id === convId)
       if (conv) {
         conv.title = editingTitle.value.trim()
       }
@@ -90,12 +157,31 @@ async function saveTitle(convId: string) {
   editingId.value = null
 }
 
+function handleMenuRename(conv: Conversation) {
+  menuOpenId.value = null
+  startEditing(conv)
+}
+
+function handleMenuCopyId(convId: string) {
+  menuOpenId.value = null
+  navigator.clipboard.writeText(convId)
+}
+
+function handleMenuDelete(convId: string) {
+  menuOpenId.value = null
+  handleDelete(convId)
+}
+
 // 删除对话
 async function handleDelete(convId: string) {
   if (props.disabled) return
+  if (isControlled.value) {
+    emit('delete', convId)
+    return
+  }
   try {
-    await window.aiApi.deleteConversation(convId)
-    conversations.value = conversations.value.filter((c) => c.id !== convId)
+    await useAIService().deleteAIChat(convId)
+    serviceConversations.value = serviceConversations.value.filter((c) => c.id !== convId)
     emit('delete', convId)
   } catch (error) {
     console.error('删除对话失败：', error)
@@ -104,14 +190,14 @@ async function handleDelete(convId: string) {
 
 // 初始化
 onMounted(() => {
-  loadConversations()
+  void loadConversations()
 })
 
 // 监听 sessionId 变化
 watch(
   () => props.sessionId,
   () => {
-    loadConversations()
+    void loadConversations()
   }
 )
 
@@ -123,182 +209,161 @@ defineExpose({
 
 <template>
   <div
-    class="flex flex-col border-r border-gray-200 bg-white transition-all dark:border-gray-800 dark:bg-gray-900"
-    :class="isCollapsed ? 'w-10' : 'w-64'"
+    class="relative shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out motion-reduce:transition-none"
+    :class="[props.embedded ? 'h-full' : 'm-3 h-[calc(100%-1.5rem)]', collapsed ? 'w-[92px]' : 'w-64']"
   >
-    <!-- 头部 -->
     <div
-      class="flex items-center justify-between border-b border-gray-200 py-2 dark:border-gray-800"
-      :class="isCollapsed ? 'px-0' : 'pl-5 pr-2'"
+      class="absolute inset-y-0 left-0 overflow-hidden rounded-lg bg-white transition-[width] duration-300 ease-in-out motion-reduce:transition-none dark:bg-sidebar-dark"
+      :class="collapsed ? 'pointer-events-none w-0' : 'w-64'"
+      :inert="collapsed"
+      :aria-hidden="collapsed ? 'true' : undefined"
     >
-      <template v-if="!isCollapsed">
-        <span class="text-xs font-medium text-gray-500 dark:text-gray-400">{{ t('ai.chat.conversation.title') }}</span>
-        <div class="flex items-center gap-1">
-          <button
-            class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            :disabled="disabled"
-            :class="{ 'cursor-not-allowed opacity-50': disabled }"
-            @click="!disabled && emit('create')"
+      <div class="flex h-full w-64 flex-col">
+        <div class="h-[52px] shrink-0 border-b border-gray-200 dark:border-gray-800" />
+
+        <!-- 展开状态列表 -->
+        <div class="flex-1 overflow-y-auto p-2">
+          <!-- 加载中 -->
+          <div v-if="visibleLoading" class="flex items-center justify-center py-8">
+            <UIcon name="i-heroicons-arrow-path" class="h-5 w-5 animate-spin text-gray-400" />
+          </div>
+
+          <!-- 空状态 -->
+          <div
+            v-else-if="visibleConversations.length === 0"
+            class="flex flex-col items-center justify-center py-12 text-center"
           >
-            <UIcon name="i-heroicons-plus" class="h-4 w-4" />
-          </button>
-          <button
-            class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-            @click="isCollapsed = !isCollapsed"
-          >
-            <UIcon name="i-heroicons-chevron-left" class="h-4 w-4" />
-          </button>
-        </div>
-      </template>
-      <template v-else>
-        <button
-          class="mx-auto rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-          @click="isCollapsed = !isCollapsed"
-        >
-          <UIcon name="i-heroicons-chevron-right" class="h-4 w-4" />
-        </button>
-      </template>
-    </div>
+            <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800">
+              <UIcon name="i-heroicons-chat-bubble-left" class="h-6 w-6 text-gray-300 dark:text-gray-600" />
+            </div>
+            <p class="mt-3 text-xs text-gray-400">{{ t('ai.chat.conversation.empty') }}</p>
+            <UButton
+              class="mt-2"
+              size="xs"
+              variant="link"
+              color="primary"
+              :disabled="disabled"
+              @click="!disabled && emit('create')"
+            >
+              {{ t('ai.chat.conversation.startNew') }}
+            </UButton>
+          </div>
 
-    <!-- 展开状态列表 -->
-    <div v-if="!isCollapsed" class="flex-1 overflow-y-auto p-2">
-      <!-- 加载中 -->
-      <div v-if="isLoading" class="flex items-center justify-center py-8">
-        <UIcon name="i-heroicons-arrow-path" class="h-5 w-5 animate-spin text-gray-400" />
-      </div>
+          <!-- 分组对话列表 -->
+          <div v-else class="space-y-3">
+            <div v-for="group in groupedConversations" :key="group.label">
+              <!-- 分组标题 -->
+              <div class="px-2 pb-1 pt-1.5 text-[10px] font-medium tracking-wide text-gray-400 dark:text-gray-500">
+                {{ group.label }}
+              </div>
 
-      <!-- 空状态 -->
-      <div v-else-if="conversations.length === 0" class="flex flex-col items-center justify-center py-12 text-center">
-        <div class="flex h-12 w-12 items-center justify-center rounded-full bg-gray-50 dark:bg-gray-800">
-          <UIcon name="i-heroicons-chat-bubble-left" class="h-6 w-6 text-gray-300 dark:text-gray-600" />
-        </div>
-        <p class="mt-3 text-xs text-gray-400">{{ t('ai.chat.conversation.empty') }}</p>
-        <UButton
-          class="mt-2"
-          size="xs"
-          variant="link"
-          color="primary"
-          :disabled="disabled"
-          @click="!disabled && emit('create')"
-        >
-          {{ t('ai.chat.conversation.startNew') }}
-        </UButton>
-      </div>
-
-      <!-- 对话列表 -->
-      <div v-else class="space-y-0.5">
-        <div
-          v-for="conv in conversations"
-          :key="conv.id"
-          class="group relative rounded-lg px-3 py-2.5 transition-all"
-          :class="[
-            'cursor-pointer',
-            activeId === conv.id
-              ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
-              : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50',
-          ]"
-          @click="emit('select', conv.id)"
-        >
-          <!-- 编辑模式 -->
-          <template v-if="editingId === conv.id">
-            <input
-              v-model="editingTitle"
-              class="w-full rounded border-none bg-white px-2 py-1 text-sm shadow-sm ring-1 ring-gray-200 focus:ring-2 focus:ring-primary-500 dark:bg-gray-900 dark:ring-gray-700"
-              :placeholder="t('ai.chat.conversation.titlePlaceholder')"
-              autoFocus
-              @blur="saveTitle(conv.id)"
-              @keyup.enter="saveTitle(conv.id)"
-              @click.stop
-            />
-          </template>
-
-          <!-- 正常模式 -->
-          <template v-else>
-            <div class="relative">
-              <!-- 标题 -->
-              <p class="line-clamp-1 pr-2 text-sm font-medium leading-snug">
-                {{ getTitle(conv) }}
-              </p>
-
-              <!-- 时间 -->
-              <p class="mt-1.5 text-[10px] text-gray-400">
-                {{ formatTime(conv.updatedAt) }}
-              </p>
-
-              <!-- 操作按钮（垂直居中，带渐变背景） -->
-              <div
-                class="absolute inset-y-0 right-0 flex items-center opacity-0 transition-opacity group-hover:opacity-100"
-                :class="{ 'opacity-100': activeId === conv.id }"
-                @click.stop
-              >
-                <!-- 左侧渐变过渡区域 -->
+              <!-- 对话项 -->
+              <div class="space-y-0.5">
                 <div
-                  class="absolute inset-y-0 -left-6 w-6 bg-linear-to-r from-transparent"
+                  v-for="conv in group.conversations"
+                  :key="conv.id"
+                  class="group relative rounded-lg px-3 py-2 transition-all"
                   :class="[
+                    'cursor-pointer',
                     activeId === conv.id
-                      ? 'to-gray-100 dark:to-gray-800'
-                      : 'to-gray-50 group-hover:to-gray-100 dark:to-gray-900 dark:group-hover:to-gray-800',
+                      ? 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white'
+                      : 'text-gray-600 hover:bg-gray-50 dark:text-gray-400 dark:hover:bg-gray-800/50',
                   ]"
-                />
-                <!-- 按钮组背景 -->
-                <div
-                  class="relative flex h-full items-center gap-0.5 pl-1 pr-0.5"
-                  :class="[
-                    activeId === conv.id
-                      ? 'bg-gray-100 dark:bg-gray-800'
-                      : 'bg-gray-50 group-hover:bg-gray-100 dark:bg-gray-900 dark:group-hover:bg-gray-800',
-                  ]"
+                  @click="emit('select', conv.id)"
                 >
-                  <UButton
-                    icon="i-heroicons-pencil"
-                    color="gray"
-                    variant="ghost"
-                    size="2xs"
-                    class="text-gray-400 hover:text-primary-500 dark:hover:text-primary-400"
-                    @click="startEditing(conv)"
-                  />
-                  <UButton
-                    icon="i-heroicons-trash"
-                    color="gray"
-                    variant="ghost"
-                    size="2xs"
-                    class="text-gray-400 hover:text-primary-500 dark:hover:text-primary-400"
-                    @click="handleDelete(conv.id)"
-                  />
+                  <!-- 编辑模式 -->
+                  <template v-if="editingId === conv.id">
+                    <input
+                      v-model="editingTitle"
+                      class="w-full rounded border-none bg-white px-2 py-1 text-sm shadow-sm outline-none ring-1 ring-gray-200 focus:ring-2 focus:ring-primary-500 dark:bg-page-dark dark:ring-gray-700"
+                      :placeholder="t('ai.chat.conversation.titlePlaceholder')"
+                      autoFocus
+                      @blur="saveTitle(conv.id)"
+                      @keyup.enter="saveTitle(conv.id)"
+                      @click.stop
+                    />
+                  </template>
+
+                  <!-- 正常模式 -->
+                  <template v-else>
+                    <div class="flex items-center">
+                      <p class="line-clamp-1 min-w-0 flex-1 text-sm leading-snug">
+                        {{ getTitle(conv) }}
+                      </p>
+
+                      <!-- 三点菜单 -->
+                      <div
+                        class="ml-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        :class="{ 'opacity-100': activeId === conv.id || menuOpenId === conv.id }"
+                        @click.stop
+                      >
+                        <UPopover
+                          :open="menuOpenId === conv.id"
+                          :ui="{ content: 'z-50 p-0' }"
+                          @update:open="(val: boolean) => (menuOpenId = val ? conv.id : null)"
+                        >
+                          <button
+                            class="rounded p-0.5 text-gray-400 transition-colors hover:bg-gray-200 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                          >
+                            <UIcon name="i-heroicons-ellipsis-horizontal" class="h-4 w-4" />
+                          </button>
+                          <template #content>
+                            <div class="w-28 p-1">
+                              <button
+                                class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                                :disabled="disabled"
+                                @click="handleMenuRename(conv)"
+                              >
+                                <UIcon name="i-heroicons-pencil" class="h-3.5 w-3.5" />
+                                {{ t('ai.chat.conversation.rename') }}
+                              </button>
+                              <button
+                                class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+                                @click="handleMenuCopyId(conv.id)"
+                              >
+                                <UIcon name="i-heroicons-clipboard-document" class="h-3.5 w-3.5" />
+                                {{ t('ai.chat.conversation.copyId') }}
+                              </button>
+                              <button
+                                class="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs text-red-500 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                                :disabled="disabled"
+                                @click="handleMenuDelete(conv.id)"
+                              >
+                                <UIcon name="i-heroicons-trash" class="h-3.5 w-3.5" />
+                                {{ t('ai.chat.conversation.delete') }}
+                              </button>
+                            </div>
+                          </template>
+                        </UPopover>
+                      </div>
+                    </div>
+                  </template>
                 </div>
               </div>
             </div>
-          </template>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- 折叠状态列表 -->
-    <div v-else class="flex flex-1 flex-col items-center gap-2 overflow-y-auto py-2">
-      <!-- 新建按钮 -->
+    <!-- 常驻工具栏独立于面板，收起过程中不重排 -->
+    <div class="pointer-events-none absolute left-0 top-0 z-10 h-[52px] w-[92px]">
+      <div v-if="canCollapse" class="pointer-events-auto absolute left-2 top-2">
+        <SidebarCollapseButton
+          :collapsed="collapsed"
+          :accessible-label="t(collapsed ? 'common.expandSidebar' : 'common.collapseSidebar')"
+          @click="toggleAIChatSidebar"
+        />
+      </div>
       <button
-        class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-pink-500 dark:hover:bg-gray-800"
-        :title="t('ai.chat.conversation.startNew')"
-        :disabled="disabled"
+        type="button"
+        class="pointer-events-auto absolute left-12 top-2 flex h-9 w-9 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
         :class="{ 'cursor-not-allowed opacity-50': disabled }"
+        :title="t('ai.chat.conversation.newConversation')"
+        :disabled="disabled"
         @click="!disabled && emit('create')"
       >
-        <UIcon name="i-heroicons-plus" class="h-4 w-4" />
-      </button>
-
-      <!-- 分隔线 -->
-      <div class="h-px w-6 bg-gray-200 dark:bg-gray-800"></div>
-
-      <!-- 对话列表图标 -->
-      <button
-        v-for="conv in conversations"
-        :key="conv.id"
-        class="rounded p-1 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
-        :class="[activeId === conv.id ? 'text-pink-500' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300']"
-        :title="getTitle(conv)"
-        @click="emit('select', conv.id)"
-      >
-        <UIcon name="i-heroicons-chat-bubble-left" class="h-4 w-4" />
+        <UIcon name="i-lucide-square-pen" class="h-4 w-4" />
       </button>
     </div>
   </div>

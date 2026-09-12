@@ -6,39 +6,21 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { i18n } from '@/i18n'
+import { usePlatformService, useAssistantService, usePreferencesService } from '@/services'
+import {
+  getDefaultGeneralAssistantId,
+  type AssistantConfig,
+  type AssistantSummary,
+  type AssistantUpgradeInfo,
+  type AssistantUpgradeResult,
+} from '@openchatlab/shared-types'
 
-const CLOUD_MARKET_BASE_URL = 'https://chatlab.fun'
+import { CHATLAB_SITE_BASE } from '@/utils/chatlabSiteLocale'
+const CLOUD_MARKET_BASE_URL = CHATLAB_SITE_BASE
 const LOCALE_PATH_MAP: Record<string, string> = { 'zh-CN': 'cn', 'zh-TW': 'cn', 'en-US': 'en', 'ja-JP': 'ja' }
 
-export interface AssistantSummary {
-  id: string
-  name: string
-  systemPrompt: string
-  presetQuestions: string[]
-  builtinId?: string
-  applicableChatTypes?: ('group' | 'private')[]
-  supportedLocales?: string[]
-}
-
-export interface AssistantConfigFull {
-  id: string
-  name: string
-  systemPrompt: string
-  presetQuestions: string[]
-  allowedBuiltinTools?: string[]
-  builtinId?: string
-  applicableChatTypes?: ('group' | 'private')[]
-  supportedLocales?: string[]
-}
-
-export interface BuiltinAssistantInfo {
-  id: string
-  name: string
-  systemPrompt: string
-  applicableChatTypes?: ('group' | 'private')[]
-  supportedLocales?: string[]
-  imported: boolean
-}
+export type { AssistantSummary } from '@openchatlab/shared-types'
+export type AssistantConfigFull = AssistantConfig
 
 export interface CloudAssistantItem {
   id: string
@@ -48,22 +30,12 @@ export interface CloudAssistantItem {
   path: string
 }
 
-interface RememberedAssistantState {
-  assistantId: string
-  expiresAt: number
-}
-
-const REMEMBER_ASSISTANT_DAYS = 7
-const REMEMBER_ASSISTANT_MS = REMEMBER_ASSISTANT_DAYS * 24 * 60 * 60 * 1000
-
 export const useAssistantStore = defineStore('assistant', () => {
   const assistants = ref<AssistantSummary[]>([])
   const selectedAssistantId = ref<string | null>(null)
-  const rememberedAssistant = ref<RememberedAssistantState | null>(null)
   const isLoaded = ref(false)
-
-  /** @deprecated 本地内置目录已清空，保留兼容 */
-  const builtinCatalog = ref<BuiltinAssistantInfo[]>([])
+  const checkedUpgradeAssistantIds = new Set<string>()
+  let assistantUpgradeSkippedVersions: Record<string, number> | null = null
 
   /** 内置工具目录（含分类） */
   const builtinToolCatalog = ref<Array<{ name: string; category: 'core' | 'analysis' }>>([])
@@ -108,26 +80,6 @@ export const useAssistantStore = defineStore('assistant', () => {
     }))
   })
 
-  function getValidRememberedAssistantId(): string | null {
-    const remembered = rememberedAssistant.value
-    if (!remembered) return null
-    if (!remembered.assistantId || typeof remembered.expiresAt !== 'number') {
-      rememberedAssistant.value = null
-      return null
-    }
-    if (remembered.expiresAt <= Date.now()) {
-      rememberedAssistant.value = null
-      return null
-    }
-    return remembered.assistantId
-  }
-
-  function isAssistantAvailableForContext(assistant: AssistantSummary, chatType: 'group' | 'private', locale: string): boolean {
-    const typeMatch = !assistant.applicableChatTypes?.length || assistant.applicableChatTypes.includes(chatType)
-    const localeMatch = !assistant.supportedLocales?.length || assistant.supportedLocales.some((l) => locale.startsWith(l))
-    return typeMatch && localeMatch
-  }
-
   function setFilterContext(chatType: 'group' | 'private', locale: string): void {
     currentChatType.value = chatType
     currentLocale.value = locale
@@ -135,29 +87,17 @@ export const useAssistantStore = defineStore('assistant', () => {
 
   async function loadAssistants(): Promise<void> {
     try {
-      assistants.value = await window.assistantApi.getAll()
-      const rememberedAssistantId = getValidRememberedAssistantId()
-      if (rememberedAssistantId && !assistants.value.some((assistant) => assistant.id === rememberedAssistantId)) {
-        rememberedAssistant.value = null
-      }
+      const svc = useAssistantService()
+      assistants.value = await svc.getAll()
       isLoaded.value = true
     } catch (error) {
       console.error('[AssistantStore] Failed to load assistants:', error)
     }
   }
 
-  /** @deprecated 本地内置目录已清空，保留兼容 */
-  async function loadBuiltinCatalog(): Promise<void> {
-    try {
-      builtinCatalog.value = await window.assistantApi.getBuiltinCatalog()
-    } catch (error) {
-      console.error('[AssistantStore] Failed to load builtin catalog:', error)
-    }
-  }
-
   async function loadBuiltinToolCatalog(): Promise<void> {
     try {
-      builtinToolCatalog.value = await window.assistantApi.getBuiltinToolCatalog()
+      builtinToolCatalog.value = await useAssistantService().getBuiltinToolCatalog()
     } catch (error) {
       console.error('[AssistantStore] Failed to load builtin tool catalog:', error)
     }
@@ -174,7 +114,7 @@ export const useAssistantStore = defineStore('assistant', () => {
     cloudError.value = null
 
     try {
-      const result = await window.api.app.fetchRemoteConfig(url)
+      const result = await usePlatformService().fetchRemoteConfig(url)
       if (!result.success || !result.data) {
         cloudError.value = result.error || 'Failed to fetch cloud catalog'
         cloudCatalog.value = []
@@ -201,12 +141,12 @@ export const useAssistantStore = defineStore('assistant', () => {
     const mdUrl = `${CLOUD_MARKET_BASE_URL}${item.path}`
 
     try {
-      const mdResult = await window.api.app.fetchRemoteConfig(mdUrl)
+      const mdResult = await usePlatformService().fetchRemoteConfig(mdUrl)
       if (!mdResult.success || typeof mdResult.data !== 'string') {
         return { success: false, error: mdResult.error || 'Failed to fetch assistant content' }
       }
 
-      const result = await window.assistantApi.importFromMd(mdResult.data)
+      const result = await useAssistantService().importFromMd(mdResult.data)
       if (result.success) {
         await loadAssistants()
       }
@@ -230,28 +170,9 @@ export const useAssistantStore = defineStore('assistant', () => {
     selectedAssistantId.value = null
   }
 
-  function rememberAssistantForDays(id: string | null, days = REMEMBER_ASSISTANT_DAYS): void {
-    if (!id) {
-      rememberedAssistant.value = null
-      return
-    }
-    rememberedAssistant.value = {
-      assistantId: id,
-      expiresAt: Date.now() + days * 24 * 60 * 60 * 1000,
-    }
-  }
-
-  function getRememberedAssistantIdForContext(chatType: 'group' | 'private', locale: string): string | null {
-    const rememberedAssistantId = getValidRememberedAssistantId()
-    if (!rememberedAssistantId) return null
-    const remembered = assistants.value.find((assistant) => assistant.id === rememberedAssistantId)
-    if (!remembered) return null
-    return isAssistantAvailableForContext(remembered, chatType, locale) ? remembered.id : null
-  }
-
   async function getAssistantConfig(id: string): Promise<AssistantConfigFull | null> {
     try {
-      return await window.assistantApi.getConfig(id)
+      return await useAssistantService().getConfig(id)
     } catch (error) {
       console.error('[AssistantStore] Failed to get config:', error)
       return null
@@ -263,10 +184,8 @@ export const useAssistantStore = defineStore('assistant', () => {
     updates: Partial<AssistantConfigFull>
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const result = await window.assistantApi.update(id, updates)
-      if (result.success) {
-        await loadAssistants()
-      }
+      const result = await useAssistantService().update(id, updates)
+      if (result.success) await loadAssistants()
       return result
     } catch (error) {
       return { success: false, error: String(error) }
@@ -275,36 +194,76 @@ export const useAssistantStore = defineStore('assistant', () => {
 
   async function resetAssistant(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const result = await window.assistantApi.reset(id)
-      if (result.success) {
-        await loadAssistants()
-      }
+      const result = await useAssistantService().reset(id)
+      if (result.success) await loadAssistants()
       return result
     } catch (error) {
       return { success: false, error: String(error) }
     }
   }
 
-  async function importAssistant(builtinId: string): Promise<{ success: boolean; error?: string }> {
+  async function checkDefaultAssistantUpgrade(locale: string): Promise<AssistantUpgradeInfo | null> {
+    const assistantId = getDefaultGeneralAssistantId(locale)
+    if (checkedUpgradeAssistantIds.has(assistantId)) return null
+
+    // 同一默认助手每次启动只提示一次；请求失败时撤销标记，允许下次进入页面重试。
+    checkedUpgradeAssistantIds.add(assistantId)
     try {
-      const result = await window.assistantApi.importAssistant(builtinId)
-      if (result.success) {
-        await loadAssistants()
-        await loadBuiltinCatalog()
+      const info = await useAssistantService().getUpgradeInfo(assistantId)
+      if (!info) return null
+
+      try {
+        if (!assistantUpgradeSkippedVersions) {
+          const preferences = await usePreferencesService().getPreferences()
+          assistantUpgradeSkippedVersions = { ...preferences.assistantUpgradeSkippedVersions }
+        }
+        if (info.latestVersion !== null && assistantUpgradeSkippedVersions[info.builtinId] === info.latestVersion) {
+          return null
+        }
+      } catch (error) {
+        // 偏好读取失败时仍展示升级提示，避免把真实可用的升级静默吞掉。
+        console.error('[AssistantStore] Failed to load skipped assistant upgrades:', error)
       }
+
+      return info
+    } catch (error) {
+      checkedUpgradeAssistantIds.delete(assistantId)
+      console.error('[AssistantStore] Failed to check assistant upgrade:', error)
+      return null
+    }
+  }
+
+  async function skipAssistantUpgrade(info: AssistantUpgradeInfo): Promise<{ success: boolean; error?: string }> {
+    if (info.latestVersion === null) {
+      return { success: false, error: 'Assistant template version is unavailable' }
+    }
+
+    try {
+      if (!assistantUpgradeSkippedVersions) {
+        const preferences = await usePreferencesService().getPreferences()
+        assistantUpgradeSkippedVersions = { ...preferences.assistantUpgradeSkippedVersions }
+      }
+      const nextSkippedVersions = {
+        ...assistantUpgradeSkippedVersions,
+        [info.builtinId]: info.latestVersion,
+      }
+      const result = await usePreferencesService().savePreferences({
+        assistantUpgradeSkippedVersions: nextSkippedVersions,
+      })
+      if (result.success) assistantUpgradeSkippedVersions = nextSkippedVersions
       return result
     } catch (error) {
       return { success: false, error: String(error) }
     }
   }
 
-  async function reimportAssistant(id: string): Promise<{ success: boolean; error?: string }> {
+  async function upgradeAssistantWithBackup(
+    info: AssistantUpgradeInfo,
+    backupName: string
+  ): Promise<AssistantUpgradeResult> {
     try {
-      const result = await window.assistantApi.reimportAssistant(id)
-      if (result.success) {
-        await loadAssistants()
-        await loadBuiltinCatalog()
-      }
+      const result = await useAssistantService().upgradeWithBackup(info.assistantId, backupName)
+      if (result.success) await loadAssistants()
       return result
     } catch (error) {
       return { success: false, error: String(error) }
@@ -315,10 +274,8 @@ export const useAssistantStore = defineStore('assistant', () => {
     config: Omit<AssistantConfigFull, 'id'>
   ): Promise<{ success: boolean; id?: string; error?: string }> {
     try {
-      const result = await window.assistantApi.create(config)
-      if (result.success) {
-        await loadAssistants()
-      }
+      const result = await useAssistantService().create(config)
+      if (result.success) await loadAssistants()
       return result
     } catch (error) {
       return { success: false, error: String(error) }
@@ -327,18 +284,15 @@ export const useAssistantStore = defineStore('assistant', () => {
 
   async function duplicateAssistant(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const config = await window.assistantApi.getConfig(id)
-      if (!config) {
-        return { success: false, error: 'Assistant not found' }
-      }
+      const svc = useAssistantService()
+      const config = await svc.getConfig(id)
+      if (!config) return { success: false, error: 'Assistant not found' }
       const { id: _id, builtinId: _bid, ...rest } = config
-      const result = await window.assistantApi.create({
+      const result = await svc.create({
         ...rest,
         name: `${config.name}${i18n.global.t('ai.assistant.duplicateSuffix')}`,
       })
-      if (result.success) {
-        await loadAssistants()
-      }
+      if (result.success) await loadAssistants()
       return result
     } catch (error) {
       return { success: false, error: String(error) }
@@ -347,10 +301,8 @@ export const useAssistantStore = defineStore('assistant', () => {
 
   async function deleteAssistant(id: string): Promise<{ success: boolean; error?: string }> {
     try {
-      const result = await window.assistantApi.delete(id)
-      if (result.success) {
-        await loadAssistants()
-      }
+      const result = await useAssistantService().delete(id)
+      if (result.success) await loadAssistants()
       return result
     } catch (error) {
       return { success: false, error: String(error) }
@@ -360,10 +312,8 @@ export const useAssistantStore = defineStore('assistant', () => {
   return {
     assistants,
     selectedAssistantId,
-    rememberedAssistant,
     selectedAssistant,
     isLoaded,
-    builtinCatalog,
     builtinToolCatalog,
     cloudCatalog,
     cloudLoading,
@@ -376,30 +326,21 @@ export const useAssistantStore = defineStore('assistant', () => {
     moreAssistants,
     hasMoreAssistants,
     loadAssistants,
-    loadBuiltinCatalog,
     loadBuiltinToolCatalog,
     fetchCloudCatalog,
     importFromCloud,
     isCloudItemImported,
     selectAssistant,
     clearSelection,
-    rememberAssistantForDays,
-    getRememberedAssistantIdForContext,
     setFilterContext,
     getAssistantConfig,
     updateAssistant,
     createAssistant,
     duplicateAssistant,
     resetAssistant,
-    importAssistant,
-    reimportAssistant,
+    checkDefaultAssistantUpgrade,
+    skipAssistantUpgrade,
+    upgradeAssistantWithBackup,
     deleteAssistant,
   }
-}, {
-  persist: [
-    {
-      pick: ['rememberedAssistant'],
-      storage: localStorage,
-    },
-  ],
 })

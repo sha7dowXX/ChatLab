@@ -1,7 +1,16 @@
 {
   "drawer": {
     "title": "聊天记录查看器",
-    "loadedCount": "已加载 {count} 条消息"
+    "resize": "调整聊天记录面板宽度"
+  },
+  "workspace": {
+    "indexMissingTitle": "还没有可用的会话摘要索引",
+    "indexMissingDescription": "原始聊天记录仍可直接查看。生成索引后，左侧会按聊天片段组织摘要；此操作不会自动调用 AI。",
+    "generateIndex": "生成索引",
+    "indexGenerated": "已生成 {count} 个聊天片段",
+    "indexGenerationFailed": "会话索引生成失败",
+    "indexLoadFailedTitle": "会话摘要索引加载失败",
+    "indexLoadFailedDescription": "原始聊天记录仍可查看。请重试加载，现有摘要不会被修改。"
   },
   "messageList": {
     "loading": "加载中...",
@@ -13,7 +22,7 @@
   },
   "filter": {
     "messageId": "消息 ID",
-    "memberNotSupported": "成员（暂不支持）",
+    "memberPlaceholder": "成员",
     "keywordsPlaceholder": "关键词，多个用逗号分隔，回车搜索",
     "startDate": "起始日期",
     "endDate": "结束日期",
@@ -21,15 +30,18 @@
     "filter": "筛选"
   },
   "timeline": {
-    "timeline": "会话",
-    "noSessions": "暂无会话",
+    "timeline": "摘要",
+    "noSessions": "暂无摘要",
     "generateSummary": "生成摘要",
+    "updateSummary": "更新摘要",
+    "summaryStale": "· 待更新",
     "tooFewMessages": "消息太少"
   },
   "summaryFailed": "摘要生成失败",
   "summaryUnknownError": "未知错误",
   "batchSummary": {
     "title": "批量生成摘要",
+    "trigger": "批量生成",
     "byRange": "按范围",
     "byTime": "按时间",
     "selectRange": "选择范围",
@@ -45,6 +57,7 @@
     "custom": "自定义",
     "found": "找到",
     "hasSummary": "个已有摘要",
+    "needsUpdate": "个待更新",
     "tooFewMessages": "个消息太少",
     "pending": "待生成:",
     "unit": "个",
@@ -63,27 +76,66 @@
     "start": "开始生成",
     "stop": "停止"
   },
+  "topics": {
+    "title": "话题",
+    "loadFailed": "话题加载失败",
+    "preflightFailed": "无法估算生成范围",
+    "startFailed": "无法开始生成话题",
+    "actionFailed": "话题任务操作失败",
+    "deleteFailed": "删除话题失败",
+    "emptyTitle": "这一天还没有话题",
+    "emptyDescription": "由 AI 按自然日阅读聊天记录，并把穿插或中断后再次出现的同一讨论归入一个话题。仅在你主动创建时消耗额度。",
+    "batchSummarize": "批量总结",
+    "batchSummarizeTitle": "批量总结话题",
+    "summarizeDay": "总结本日话题",
+    "createDescription": "选择起点后将处理到聊天记录最后一天，可随时暂停并继续。",
+    "start": "开始创建",
+    "noMessages": "范围内没有消息",
+    "updateDay": "更新当天",
+    "pause": "暂停",
+    "resume": "继续",
+    "progress": "已完成 {completed}/{total} 天",
+    "progressBlock": "正在分析第 {current}/{total} 个原文块，已等待 {seconds} 秒",
+    "progressFinalizing": "正在收束当天话题，已等待 {seconds} 秒",
+    "stale": "当天聊天记录已变化。以下仍是上一次成功结果，更新前请以原消息为准。",
+    "evidence": "原消息",
+    "deleteTitle": "删除当天话题？",
+    "deleteDescription": "只会删除这一天的 AI 派生结果，不会删除聊天记录；之后可以重新创建。",
+    "range": {
+      "current": "从当前浏览日开始",
+      "currentDescription": "从 {date} 处理到聊天记录最后一天",
+      "custom": "选择开始日期",
+      "customDescription": "从指定日期处理到聊天记录最后一天",
+      "today": "从今天开始",
+      "todayDescription": "只处理今天有消息的记录",
+      "year": "从今年开始",
+      "yearDescription": "处理今年至今有消息的日期",
+      "all": "从最开始",
+      "allDescription": "从最早聊天日期开始完整回溯"
+    },
+    "estimate": {
+      "range": "{start} 至 {end}",
+      "days": "活跃天数",
+      "messages": "消息",
+      "calls": "预计调用"
+    },
+    "status": {
+      "pending": "等待开始",
+      "running": "正在整理话题",
+      "paused": "已暂停",
+      "completed": "已完成",
+      "failed": "生成失败",
+      "cancelled": "已取消"
+    },
+    "topicState": {
+      "active": "进行中",
+      "closed": "已告一段落"
+    }
+  },
   "messageItem": {
     "viewContext": "查看上下文",
-    "contextTitle": "消息上下文（前后各10条）",
-    "noContext": "暂无上下文",
-    "replyTo": "回复"
-  },
-  "sessionIndex": {
-    "title": "会话索引",
-    "subtitle": "用于聊天记录的时间线导航",
-    "notGenerated": "尚未生成会话索引",
-    "notGeneratedHint": "生成会话索引后，您可以在聊天记录查看器中使用时间线快速导航到不同的会话。",
-    "whatIsIt": "会话索引的作用：",
-    "benefit1": "根据消息时间间隔自动识别会话边界",
-    "benefit2": "在聊天记录查看器中提供时间线导航",
-    "benefit3": "为 AI 分析提供对话上下文理解能力",
-    "generated": "会话索引已生成",
-    "sessionCount": "共识别出 {count} 个会话",
-    "regenerateHint": "如果您调整了会话间隔阈值，可以重新生成索引。",
-    "generate": "生成索引",
-    "regenerate": "重新生成",
-    "generating": "生成中...",
-    "cancel": "取消"
+    "replyTo": "回复",
+    "expandMessyContent": "展开完整内容",
+    "collapseMessyContent": "收起"
   }
 }

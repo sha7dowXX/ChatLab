@@ -1,89 +1,83 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import type { ProviderDefinition, ModelDefinition } from '@electron/preload/index'
+import { useLLMService } from '@/services'
+import type { AIServiceConfigDisplay, LLMProvider } from '@/services'
+import { trackProductEvent } from '@/services/product-analytics'
 
-/**
- * LLM 服务配置（展示用，不含敏感信息）
- */
-export interface AIServiceConfigDisplay {
-  id: string
-  name: string
-  provider: string
-  apiKeySet: boolean
-  model?: string
-  baseUrl?: string
-  createdAt: number
-  updatedAt: number
-}
+export type { AIServiceConfigDisplay, LLMProvider }
 
-/**
- * LLM 提供商信息
- */
-export interface LLMProvider {
-  id: string
-  name: string
-  description: string
-  defaultBaseUrl: string
-  models: Array<{ id: string; name: string; description?: string }>
-}
-
-/**
- * LLM 配置状态管理
- * 集中管理 LLM 配置的获取、切换和刷新
- */
 export const useLLMStore = defineStore('llm', () => {
   // ============ 状态 ============
 
-  /** 所有配置列表 */
   const configs = ref<AIServiceConfigDisplay[]>([])
-
-  /** 所有提供商列表 */
   const providers = ref<LLMProvider[]>([])
 
-  /** 当前激活配置 ID */
-  const activeConfigId = ref<string | null>(null)
-
-  /** 是否正在加载 */
+  const defaultAssistant = ref<{ configId: string; modelId: string } | null>(null)
+  const fastModel = ref<{ configId: string; modelId: string } | null>(null)
   const isLoading = ref(false)
-
-  /** 是否已初始化 */
   const isInitialized = ref(false)
+
+  const providerRegistry = ref<ProviderDefinition[]>([])
+  const modelCatalog = ref<ModelDefinition[]>([])
 
   // ============ 计算属性 ============
 
-  /** 当前激活的配置 */
-  const activeConfig = computed(() => configs.value.find((c) => c.id === activeConfigId.value) || null)
-
-  /** 是否有可用配置 */
-  const hasConfig = computed(() => !!activeConfigId.value)
-
-  /** 是否达到最大配置数量 */
+  const defaultAssistantConfig = computed(
+    () => configs.value.find((c) => c.id === defaultAssistant.value?.configId) || null
+  )
+  const fastModelConfig = computed(() => configs.value.find((c) => c.id === fastModel.value?.configId) || null)
+  const hasConfig = computed(() => !!defaultAssistant.value)
+  const hasConfiguredModel = computed(() => !!defaultAssistantConfig.value && !!defaultAssistant.value?.modelId.trim())
   const isMaxConfigs = computed(() => configs.value.length >= 99)
+
+  function getProviderById(id: string): ProviderDefinition | undefined {
+    return providerRegistry.value.find((p) => p.id === id)
+  }
+
+  function getModelsByProviderId(providerId: string): ModelDefinition[] {
+    return modelCatalog.value.filter((m) => m.providerId === providerId)
+  }
+
+  function getModelById(providerId: string, modelId: string): ModelDefinition | undefined {
+    return modelCatalog.value.find((m) => m.providerId === providerId && m.id === modelId)
+  }
+
+  function findModelAcrossProviders(modelId: string): ModelDefinition | undefined {
+    return modelCatalog.value.find((m) => m.id === modelId)
+  }
 
   // ============ 方法 ============
 
-  /**
-   * 初始化加载配置（仅首次调用生效）
-   */
   async function init() {
     if (isInitialized.value) return
     await loadConfigs()
     isInitialized.value = true
   }
 
-  /**
-   * 加载所有配置和提供商
-   */
   async function loadConfigs() {
+    const wasInitialized = isInitialized.value
+    const wasConfigured = hasConfiguredModel.value
     isLoading.value = true
     try {
-      const [providersData, configsData, activeId] = await Promise.all([
-        window.llmApi.getProviders(),
-        window.llmApi.getAllConfigs(),
-        window.llmApi.getActiveConfigId(),
+      const svc = useLLMService()
+      const [providersData, registryData, catalogData, configStore, assistantSlot, fastSlot] = await Promise.all([
+        svc.getProviders(),
+        svc.getProviderRegistry(),
+        svc.getModelCatalog(),
+        svc.getConfigStore(),
+        svc.getDefaultAssistantSlot(),
+        svc.getFastModelSlot(),
       ])
       providers.value = providersData
-      configs.value = configsData
-      activeConfigId.value = activeId
+      providerRegistry.value = registryData as ProviderDefinition[]
+      modelCatalog.value = catalogData as ModelDefinition[]
+      configs.value = configStore.configs
+      defaultAssistant.value = assistantSlot
+      fastModel.value = fastSlot
+      if (wasInitialized && !wasConfigured && hasConfiguredModel.value) {
+        trackProductEvent('ai_setup_completed')
+      }
     } catch (error) {
       console.error('[LLM Store] 加载配置失败：', error)
     } finally {
@@ -91,40 +85,47 @@ export const useLLMStore = defineStore('llm', () => {
     }
   }
 
-  /**
-   * 切换激活配置
-   * @param id 配置 ID
-   * @returns 是否成功
-   */
-  async function setActiveConfig(id: string): Promise<boolean> {
+  async function setDefaultAssistantModel(configId: string, modelId: string): Promise<boolean> {
+    const wasConfigured = hasConfiguredModel.value
     try {
-      const result = await window.llmApi.setActiveConfig(id)
+      const result = await useLLMService().setDefaultAssistantModel(configId, modelId)
       if (result.success) {
-        activeConfigId.value = id
+        defaultAssistant.value = { configId, modelId }
+        if (!wasConfigured && hasConfiguredModel.value) {
+          trackProductEvent('ai_setup_completed')
+        }
         return true
       }
-      console.error('[LLM Store] 设置激活配置失败：', result.error)
+      console.error('[LLM Store] 设置默认助手模型失败：', result.error)
       return false
     } catch (error) {
-      console.error('[LLM Store] 设置激活配置失败：', error)
+      console.error('[LLM Store] 设置默认助手模型失败：', error)
       return false
     }
   }
 
-  /**
-   * 刷新配置列表
-   * 供外部（如设置页面修改后）调用
-   */
+  async function setFastModel(slot: { configId: string; modelId: string } | null): Promise<boolean> {
+    try {
+      const result = await useLLMService().setFastModel(slot)
+      if (result.success) {
+        fastModel.value = slot
+        return true
+      }
+      console.error('[LLM Store] 设置快速模型失败：', result.error)
+      return false
+    } catch (error) {
+      console.error('[LLM Store] 设置快速模型失败：', error)
+      return false
+    }
+  }
+
   async function refreshConfigs() {
     await loadConfigs()
   }
 
-  /**
-   * 获取提供商名称
-   * @param providerId 提供商 ID
-   * @returns 提供商名称
-   */
   function getProviderName(providerId: string): string {
+    const def = providerRegistry.value.find((p) => p.id === providerId)
+    if (def) return def.name
     return providers.value.find((p) => p.id === providerId)?.name || providerId
   }
 
@@ -132,18 +133,28 @@ export const useLLMStore = defineStore('llm', () => {
     // 状态
     configs,
     providers,
-    activeConfigId,
+    providerRegistry,
+    modelCatalog,
+    defaultAssistant,
+    fastModel,
     isLoading,
     isInitialized,
     // 计算属性
-    activeConfig,
+    defaultAssistantConfig,
+    fastModelConfig,
     hasConfig,
+    hasConfiguredModel,
     isMaxConfigs,
     // 方法
     init,
     loadConfigs,
-    setActiveConfig,
+    setDefaultAssistantModel,
+    setFastModel,
     refreshConfigs,
     getProviderName,
+    getProviderById,
+    getModelsByProviderId,
+    getModelById,
+    findModelAcrossProviders,
   }
 })

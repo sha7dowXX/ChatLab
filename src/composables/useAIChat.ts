@@ -13,6 +13,7 @@ import type {
   ToolBlockContent,
   MentionedMemberContext,
   ContentBlock,
+  SendMessageOptions,
   SendMessageResult,
 } from '@/stores/aiChat'
 import type { TokenUsage, AgentRuntimeStatus } from '@electron/shared/types'
@@ -27,6 +28,7 @@ export type {
   ToolBlockContent,
   MentionedMemberContext,
   ContentBlock,
+  SendMessageOptions,
   SendMessageResult,
 }
 
@@ -35,7 +37,8 @@ export function useAIChat(
   sessionName: string,
   timeFilter?: { startTs: number; endTs: number },
   chatType: 'group' | 'private' = 'group',
-  locale: string = 'zh-CN'
+  locale: string = 'zh-CN',
+  initialAIChatId?: string | null
 ) {
   const aiChatStore = useAIChatStore()
   const { chatKey, state } = aiChatStore.ensureSessionState({
@@ -46,33 +49,31 @@ export function useAIChat(
     locale,
   })
 
-  // 每次进入 AI Tab 时重置到助手选择页（从浮动任务条返回时除外）
-  void aiChatStore.resetToSelectorOnEnter(chatKey)
+  // 每次进入 AI Tab 时确保默认选中助手（从浮动任务条返回时除外）
+  const initialization = aiChatStore.resetToSelectorOnEnter(chatKey, initialAIChatId)
 
   // 当前可见的 AI 页应恢复自己的助手上下文，避免不同会话之间串助手选择。
   aiChatStore.applySessionAssistantSelection(chatKey)
 
   return {
+    initialization,
     messages: toRef(state, 'messages'),
     sourceMessages: toRef(state, 'sourceMessages'),
     currentKeywords: toRef(state, 'currentKeywords'),
     isLoadingSource: toRef(state, 'isLoadingSource'),
     isAIThinking: toRef(state, 'isAIThinking'),
-    showAssistantSelector: toRef(state, 'showAssistantSelector'),
-    currentConversationId: toRef(state, 'currentConversationId'),
+    currentAIChatId: toRef(state, 'currentAIChatId'),
     currentToolStatus: toRef(state, 'currentToolStatus'),
     toolsUsedInCurrentRound: toRef(state, 'toolsUsedInCurrentRound'),
     sessionTokenUsage: toRef(state, 'sessionTokenUsage'),
     agentStatus: toRef(state, 'agentStatus'),
     selectedAssistantId: toRef(state, 'selectedAssistantId'),
-    sendMessage: (content: string, options?: { mentionedMembers?: MentionedMemberContext[] }) =>
-      aiChatStore.sendMessage(chatKey, content, options),
-    loadConversation: (conversationId: string) => aiChatStore.loadConversation(chatKey, conversationId),
-    startNewConversation: (welcomeMessage?: string) => aiChatStore.startNewConversation(chatKey, welcomeMessage),
-    loadMoreSourceMessages: () => aiChatStore.loadMoreSourceMessages(),
-    updateMaxMessages: () => aiChatStore.updateMaxMessages(),
+    sendMessage: (content: string, options?: SendMessageOptions) => aiChatStore.sendMessage(chatKey, content, options),
+    editMessageAndRegenerate: (messageId: string, content: string) =>
+      aiChatStore.editMessageAndRegenerate(chatKey, messageId, content),
+    loadAIChat: (aiChatId: string) => aiChatStore.loadAIChat(chatKey, aiChatId),
+    startNewAIChat: (welcomeMessage?: string) => aiChatStore.startNewAIChat(chatKey, welcomeMessage),
     stopGeneration: () => aiChatStore.stopGeneration(chatKey),
     selectAssistantForSession: (assistantId: string) => aiChatStore.selectAssistantForSession(chatKey, assistantId),
-    clearAssistantForSession: () => aiChatStore.clearAssistantForSession(chatKey),
   }
 }
